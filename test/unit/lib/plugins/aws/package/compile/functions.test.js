@@ -1829,6 +1829,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
     let serverless;
     let serviceConfig;
     let iamRolePolicyStatements;
+    const imageSha = '6bb600b4d6e1d7cf521097177dd0c4e9ea373edb91984a505333be8ac9455d38';
+    const imageWithSha = `000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker@sha256:${imageSha}`;
     const imageDigestFromECR =
       'sha256:2e6b10a4b1ca0f6d3563a8a1f034dde7c4d7c93b50aa91f24311765d0822186b';
     const awsRequestStubMap = {
@@ -1847,6 +1849,14 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
         fixture: 'functionDestinations',
         cliArgs: ['package'],
         configExt: {
+          provider: {
+            images: {
+              imagewithexplicituri: {
+                uri: imageWithSha,
+              },
+              imagewithimplicituri: imageWithSha,
+            },
+          },
           functions: {
             fnTargetFailure: {
               handler: 'target.handler',
@@ -1875,11 +1885,16 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
               },
             },
             fnImage: {
-              image:
-                '000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker@sha256:6bb600b4d6e1d7cf521097177dd0c4e9ea373edb91984a505333be8ac9455d38',
+              image: imageWithSha,
             },
             fnImageWithTag: {
               image: '000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker:stable',
+            },
+            fnImageWithExplicitUri: {
+              image: 'imagewithexplicituri',
+            },
+            fnImageWithImplicitUri: {
+              image: 'imagewithimplicituri',
             },
           },
         },
@@ -2221,6 +2236,42 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           resource.Properties.FunctionName.Ref === functionCfLogicalId
       ).Properties;
       expect(versionCfConfig.CodeSha256).to.equal(imageDigestFromECR.slice('sha256:'.length));
+    });
+
+    it('should support `functions[].image` that references provider.images defined with explicit uri', () => {
+      const functionCfLogicalId = naming.getLambdaLogicalId('fnImageWithExplicitUri');
+      const functionCfConfig = cfResources[functionCfLogicalId].Properties;
+
+      expect(functionCfConfig.Code).to.deep.equal({
+        ImageUri: imageWithSha,
+      });
+      expect(functionCfConfig).to.not.have.property('Handler');
+      expect(functionCfConfig).to.not.have.property('Runtime');
+
+      const versionCfConfig = Object.values(cfResources).find(
+        (resource) =>
+          resource.Type === 'AWS::Lambda::Version' &&
+          resource.Properties.FunctionName.Ref === functionCfLogicalId
+      ).Properties;
+      expect(versionCfConfig.CodeSha256).to.equal(imageSha);
+    });
+
+    it('should support `functions[].image` that references provider.images defined with implicit uri', () => {
+      const functionCfLogicalId = naming.getLambdaLogicalId('fnImageWithImplicitUri');
+      const functionCfConfig = cfResources[functionCfLogicalId].Properties;
+
+      expect(functionCfConfig.Code).to.deep.equal({
+        ImageUri: imageWithSha,
+      });
+      expect(functionCfConfig).to.not.have.property('Handler');
+      expect(functionCfConfig).to.not.have.property('Runtime');
+
+      const versionCfConfig = Object.values(cfResources).find(
+        (resource) =>
+          resource.Type === 'AWS::Lambda::Version' &&
+          resource.Properties.FunctionName.Ref === functionCfLogicalId
+      ).Properties;
+      expect(versionCfConfig.CodeSha256).to.equal(imageSha);
     });
   });
 
