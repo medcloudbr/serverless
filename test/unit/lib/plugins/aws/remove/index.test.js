@@ -21,12 +21,15 @@ describe('AwsRemove', () => {
     let emptyS3BucketStub;
     let removeStackStub;
     let monitorStackStub;
+    let removeEcrRepositoryStub;
 
+    // TODO: refactor tests
     beforeEach(() => {
       validateStub = sinon.stub(awsRemove, 'validate').resolves();
       emptyS3BucketStub = sinon.stub(awsRemove, 'emptyS3Bucket').resolves();
       removeStackStub = sinon.stub(awsRemove, 'removeStack').resolves();
       monitorStackStub = sinon.stub(awsRemove, 'monitorStack').resolves();
+      removeEcrRepositoryStub = sinon.stub(awsRemove, 'removeEcrRepository').resolves();
     });
 
     afterEach(() => {
@@ -34,6 +37,7 @@ describe('AwsRemove', () => {
       awsRemove.emptyS3Bucket.restore();
       awsRemove.removeStack.restore();
       awsRemove.monitorStack.restore();
+      awsRemove.removeEcrRepository.restore();
     });
 
     it('should have hooks', () => expect(awsRemove.hooks).to.be.not.empty);
@@ -51,6 +55,7 @@ describe('AwsRemove', () => {
         expect(emptyS3BucketStub.calledAfter(validateStub)).to.be.equal(true);
         expect(removeStackStub.calledAfter(emptyS3BucketStub)).to.be.equal(true);
         expect(monitorStackStub.calledAfter(emptyS3BucketStub)).to.be.equal(true);
+        expect(removeEcrRepositoryStub.calledAfter(monitorStackStub)).to.be.true;
       });
     });
   });

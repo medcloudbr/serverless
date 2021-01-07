@@ -294,10 +294,13 @@ describe('AwsDeploy', () => {
 
     describe('"aws:deploy:finalize:cleanup" hook', () => {
       let cleanupS3BucketStub;
+      let cleanupEcrRepositoryStub;
       let spawnAwsCommonCleanupTempDirStub;
 
+      // TODO: refactor tests
       beforeEach(() => {
         cleanupS3BucketStub = sinon.stub(awsDeploy, 'cleanupS3Bucket').resolves();
+        cleanupEcrRepositoryStub = sinon.stub(awsDeploy, 'cleanupEcrRepository').resolves();
         spawnAwsCommonCleanupTempDirStub = spawnStub
           .withArgs('aws:common:cleanupTempDir')
           .resolves();
@@ -305,6 +308,7 @@ describe('AwsDeploy', () => {
 
       afterEach(() => {
         awsDeploy.cleanupS3Bucket.restore();
+        awsDeploy.cleanupEcrRepository.restore();
       });
 
       it('should do the default cleanup if no packaging config is used', () => {
@@ -333,6 +337,7 @@ describe('AwsDeploy', () => {
 
         return awsDeploy.hooks['aws:deploy:finalize:cleanup']().then(() => {
           expect(cleanupS3BucketStub.calledOnce).to.equal(true);
+          expect(cleanupEcrRepositoryStub.calledOnce).to.equal(true);
           expect(spawnAwsCommonCleanupTempDirStub.calledAfter(cleanupS3BucketStub)).to.equal(true);
         });
       });
