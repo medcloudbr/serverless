@@ -1756,6 +1756,60 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
         expect(fooFunctionRole).to.equal(fooFunctionConfig.role);
       });
     });
+
+    it('should fail if `functions[].image` references image without path and uri', async () => {
+      await expect(
+        runServerless({
+          fixture: 'function',
+          cliArgs: ['package'],
+          configExt: {
+            provider: {
+              docker: {
+                images: {
+                  invalidimage: {},
+                },
+              },
+            },
+            functions: {
+              fnProviderInvalidImage: {
+                image: 'invalidimage',
+              },
+            },
+          },
+        })
+      ).to.be.rejectedWith(
+        'Either "uri" or "path" property needs to be set on image "invalidimage"'
+      );
+    });
+
+    it('should fail if `functions[].image` references image with both path and uri', async () => {
+      await expect(
+        runServerless({
+          fixture: 'function',
+          cliArgs: ['package'],
+          configExt: {
+            provider: {
+              docker: {
+                images: {
+                  invalidimage: {
+                    path: './',
+                    uri:
+                      '000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker@sha256:6bb600b4d6e1d7cf521097177dd0c4e9ea373edb91984a505333be8ac9455d38',
+                  },
+                },
+              },
+            },
+            functions: {
+              fnProviderInvalidImage: {
+                image: 'invalidimage',
+              },
+            },
+          },
+        })
+      ).to.be.rejectedWith(
+        'Either "uri" or "path" property (not both) needs to be set on image "invalidimage"'
+      );
+    });
   });
 
   describe.skip('TODO: `provider.role` variants', () => {
@@ -1850,11 +1904,13 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
         cliArgs: ['package'],
         configExt: {
           provider: {
-            images: {
-              imagewithexplicituri: {
-                uri: imageWithSha,
+            docker: {
+              images: {
+                imagewithexplicituri: {
+                  uri: imageWithSha,
+                },
+                imagewithimplicituri: imageWithSha,
               },
-              imagewithimplicituri: imageWithSha,
             },
           },
           functions: {
@@ -1890,10 +1946,10 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
             fnImageWithTag: {
               image: '000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker:stable',
             },
-            fnImageWithExplicitUri: {
+            fnProviderImageWithExplicitUri: {
               image: 'imagewithexplicituri',
             },
-            fnImageWithImplicitUri: {
+            fnProviderImageWithImplicitUri: {
               image: 'imagewithimplicituri',
             },
           },
@@ -2238,8 +2294,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       expect(versionCfConfig.CodeSha256).to.equal(imageDigestFromECR.slice('sha256:'.length));
     });
 
-    it('should support `functions[].image` that references provider.images defined with explicit uri', () => {
-      const functionCfLogicalId = naming.getLambdaLogicalId('fnImageWithExplicitUri');
+    it('should support `functions[].image` that references provider.docker.images defined with explicit uri', () => {
+      const functionCfLogicalId = naming.getLambdaLogicalId('fnProviderImageWithExplicitUri');
       const functionCfConfig = cfResources[functionCfLogicalId].Properties;
 
       expect(functionCfConfig.Code).to.deep.equal({
@@ -2256,8 +2312,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       expect(versionCfConfig.CodeSha256).to.equal(imageSha);
     });
 
-    it('should support `functions[].image` that references provider.images defined with implicit uri', () => {
-      const functionCfLogicalId = naming.getLambdaLogicalId('fnImageWithImplicitUri');
+    it('should support `functions[].image` that references provider.docker.images defined with implicit uri', () => {
+      const functionCfLogicalId = naming.getLambdaLogicalId('fnProviderImageWithImplicitUri');
       const functionCfConfig = cfResources[functionCfLogicalId].Properties;
 
       expect(functionCfConfig.Code).to.deep.equal({
@@ -2272,6 +2328,22 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           resource.Properties.FunctionName.Ref === functionCfLogicalId
       ).Properties;
       expect(versionCfConfig.CodeSha256).to.equal(imageSha);
+    });
+
+    it('should fail if `functions[].image` references image not defined in `provider.docker.images`', async () => {
+      await expect(
+        runServerless({
+          fixture: 'function',
+          cliArgs: ['package'],
+          configExt: {
+            functions: {
+              fnProviderUndefinedImage: {
+                image: 'undefinedimage',
+              },
+            },
+          },
+        })
+      ).to.be.rejectedWith('Referenced "undefinedimage" not defined in "provider.docker.images"');
     });
   });
 
