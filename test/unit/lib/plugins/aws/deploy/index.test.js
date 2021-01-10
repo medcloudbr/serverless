@@ -294,12 +294,16 @@ describe('AwsDeploy', () => {
 
     describe('"aws:deploy:finalize:cleanup" hook', () => {
       let cleanupS3BucketStub;
+      let checkIfEcrRepositoryExistsStub;
       let cleanupEcrRepositoryStub;
       let spawnAwsCommonCleanupTempDirStub;
 
-      // TODO: refactor tests
+      // TODO: Refactor to runServerless
       beforeEach(() => {
         cleanupS3BucketStub = sinon.stub(awsDeploy, 'cleanupS3Bucket').resolves();
+        checkIfEcrRepositoryExistsStub = sinon
+          .stub(awsDeploy, 'checkIfEcrRepositoryExists')
+          .resolves(true);
         cleanupEcrRepositoryStub = sinon.stub(awsDeploy, 'cleanupEcrRepository').resolves();
         spawnAwsCommonCleanupTempDirStub = spawnStub
           .withArgs('aws:common:cleanupTempDir')
@@ -309,6 +313,7 @@ describe('AwsDeploy', () => {
       afterEach(() => {
         awsDeploy.cleanupS3Bucket.restore();
         awsDeploy.cleanupEcrRepository.restore();
+        awsDeploy.checkIfEcrRepositoryExists.restore();
       });
 
       it('should do the default cleanup if no packaging config is used', () => {
@@ -317,6 +322,8 @@ describe('AwsDeploy', () => {
 
         return awsDeploy.hooks['aws:deploy:finalize:cleanup']().then(() => {
           expect(cleanupS3BucketStub.calledOnce).to.equal(true);
+          expect(cleanupEcrRepositoryStub.calledOnce).to.be.true;
+          expect(checkIfEcrRepositoryExistsStub.calledOnce).to.be.true;
           expect(spawnAwsCommonCleanupTempDirStub.calledOnce).to.equal(false);
         });
       });
@@ -327,6 +334,8 @@ describe('AwsDeploy', () => {
 
         return awsDeploy.hooks['aws:deploy:finalize:cleanup']().then(() => {
           expect(cleanupS3BucketStub.calledOnce).to.equal(true);
+          expect(cleanupEcrRepositoryStub.calledOnce).to.be.true;
+          expect(checkIfEcrRepositoryExistsStub.calledOnce).to.be.true;
           expect(spawnAwsCommonCleanupTempDirStub.calledAfter(cleanupS3BucketStub)).to.equal(true);
         });
       });
@@ -337,7 +346,8 @@ describe('AwsDeploy', () => {
 
         return awsDeploy.hooks['aws:deploy:finalize:cleanup']().then(() => {
           expect(cleanupS3BucketStub.calledOnce).to.equal(true);
-          expect(cleanupEcrRepositoryStub.calledOnce).to.equal(true);
+          expect(cleanupEcrRepositoryStub.calledOnce).to.be.true;
+          expect(checkIfEcrRepositoryExistsStub.calledOnce).to.be.true;
           expect(spawnAwsCommonCleanupTempDirStub.calledAfter(cleanupS3BucketStub)).to.equal(true);
         });
       });
@@ -347,6 +357,8 @@ describe('AwsDeploy', () => {
 
         return awsDeploy.hooks['aws:deploy:finalize:cleanup']().then(() => {
           expect(cleanupS3BucketStub.called).to.equal(false);
+          expect(cleanupEcrRepositoryStub.calledOnce).to.be.false;
+          expect(checkIfEcrRepositoryExistsStub.calledOnce).to.be.false;
           expect(spawnAwsCommonCleanupTempDirStub.called).to.equal(false);
         });
       });
