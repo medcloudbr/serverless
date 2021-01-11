@@ -61,7 +61,7 @@ describe('AwsRemove', () => {
         expect(removeStackStub.calledAfter(emptyS3BucketStub)).to.be.equal(true);
         expect(monitorStackStub.calledAfter(emptyS3BucketStub)).to.be.equal(true);
         expect(removeEcrRepositoryStub.calledAfter(monitorStackStub)).to.be.true;
-        expect(checkIfEcrRepositoryExistsStub).to.be.calledOnce;
+        expect(checkIfEcrRepositoryExistsStub.calledOnce).to.be.true;
       });
     });
   });
