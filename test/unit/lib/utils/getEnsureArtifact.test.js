@@ -35,7 +35,7 @@ describe('#getEnsureArtifact', () => {
     ensureArtifact().then(() => expect(invokedCount).to.equal(1)));
 
   it('Should not generate, if generated in past', () => {
-    getEnsureArtifact._ensureArtifact.delete(testArtifactName);
+    getEnsureArtifact.delete(testArtifactName);
     return ensureArtifact().then(() => expect(invokedCount).to.equal(1));
   });
 
