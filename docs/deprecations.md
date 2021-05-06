@@ -8,7 +8,200 @@ layout: Doc
 
 ## How to disable specific deprecation logs
 
-To disable specific deprecations set `SLS_DEPRECATION_DISABLE` environment variable. Setting `SLS_DEPRECATION_DISABLE=*` will disable all deprecations. If you want to disable specific deprecations set `SLS_DEPRECATION_DISABLE=CODE1,CODE2`.
+To disable specific deprecations set `SLS_DEPRECATION_DISABLE` environment variable. Setting `SLS_DEPRECATION_DISABLE=*` will disable all deprecations. If you want to disable specific deprecations set `SLS_DEPRECATION_DISABLE=CODE1,CODE2`. Alternatively, you can also use `disabledDeprecations` in your `serverless.yml` in the following manner:
+
+```yml
+service: myService
+disabledDeprecations:
+  - CODE_1 # To disable specific deprecation with code "CODE_1"
+  - '*' # To disable all deprecation messages
+```
+
+<a name="AWS_API_GATEWAY_NON_APPLICABLE_SETTINGS"><div>&nbsp;</div></a>
+
+## AWS API Gateway non-applicable settings configured
+
+Deprecation code: `AWS_API_GATEWAY_NON_APPLICABLE_SETTINGS`
+
+When external API Gateway resource is used and imported via `provider.apiGateway.restApiId` setting, both `provider.logs.restApi` and `provider.tracing.apiGateway` will be ignored. These settings are applicable only if API Gateway resource is provisioned by Serverless Framework.
+
+<a name="CLI_OPTIONS_SCHEMA'"><div>&nbsp;</div></a>
+
+## CLI Options extensions, `type` requirement
+
+Deprecation code: `CLI_OPTIONS_SCHEMA'`
+
+Internal handling of CLI arguments was improved with type awareness for options. Now each option definition is expected have `type` defined in its settings.
+
+Possible values are `string`, `boolean` and `multiple`. Check [Defining options](/framework/docs/providers/aws/guide/plugins#defining-options) documentation for more info.
+
+If you rely on a plugin which does not set types (yet) please report the issue at its issue tracker.
+
+Starting with v3.0.0 any option extensions which does not have `type` defined will be communicated with a thrown error
+
+<a name="NEW_PACKAGE_PATTERNS"><div>&nbsp;</div></a>
+
+## New way to define packaging patterns
+
+Deprecation code: `NEW_PACKAGE_PATTERNS`
+
+Please use `package.patterns`. `package.include` and `package.exclude` will be removed with v3.0.0
+
+<a name="UNSUPPORTED_CLI_OPTIONS"><div>&nbsp;</div></a>
+
+## Handling of unrecognized CLI options
+
+Deprecation code: `UNSUPPORTED_CLI_OPTIONS`
+
+So far Framework ignored any not recognized CLI options as passed with a CLI command. Still such handling
+is error prone, as due to e.g. accidental typos, important information may not be passed to the command and lead to unwanted results.
+
+Starting with v3.0.0, Serverless will report unrecognized options with a thrown error.
+
+_Note: If you've used such options to aid dynamic resolution of service configuration (passing custom values to `${opt:..}` resolvers)._
+_We suggest to rely on environment variables instead. Setup of environment variables is also way more
+convenient since we've added support for [`.env`](/framework/docs/environment-variables#support-for-env-files) files._
+
+<a name="CLI_OPTIONS_BEFORE_COMMAND"><div>&nbsp;</div></a>
+
+## CLI command options should follow command
+
+Deprecation code: `CLI_OPTIONS_BEFORE_COMMAND`
+
+Starting with v3.0.0, Serverless will not support putting options before command, e.g. `sls -v deploy` will no longer be recognized as `deploy` command.
+
+Ensure to always format CLI command as `sls [command..] [options...]`
+
+<a name="CONFIG_VALIDATION_MODE_DEFAULT"><div>&nbsp;</div></a>
+
+## `configValidationMode: error` will be new default`
+
+Deprecation code: `CONFIG_VALIDATION_MODE_DEFAULT`
+
+Starting with v3.0.0, Serverless will throw on configuration errors by default. This is changing from the previous default, `configValidationMode: warn`
+
+Learn more about configuration validation here: http://slss.io/configuration-validation
+
+<a name="AWS_API_GATEWAY_SCHEMAS"><div>&nbsp;</div></a>
+
+## AWS API Gateway schemas
+
+Deprecation code: `AWS_API_GATEWAY_SCHEMAS`
+
+Starting with v3.0.0, `http.request.schema` property will be replaced by `http.request.schemas`. In addition to supporting functionalities such as model name definition and reuse of existing schemas, `http.request.schemas` also supports the same notation as `http.request.schema`, so you can safely migrate your existing configuration to the new property. For more details about the new configuration, please refer to the [API Gateway Event](/framework/docs/providers/aws/events/apigateway.md)
+
+<a name="AWS_EVENT_BRIDGE_CUSTOM_RESOURCE"><div>&nbsp;</div></a>
+
+## AWS EventBridge lambda event triggers
+
+Deprecation code: `AWS_EVENT_BRIDGE_CUSTOM_RESOURCE`
+
+Starting with v3.0.0 AWS EventBridge lambda event triggers and all associated EventBridge resources will be deployed using native CloudFormation resources instead of a custom resource that used a lambda to deploy them via the AWS SDK/API.
+
+Adapt to this behavior now by setting `provider.eventBridge.useCloudFormation: true`.
+
+<a name="NEW_VARIABLES_RESOLVER"><div>&nbsp;</div></a>
+
+## New variables resolver
+
+Deprecation code: `NEW_VARIABLES_RESOLVER`
+
+Framework was updated with a new implementation of variables resolver.
+
+It supports very same variable syntax, and is being updated with support for same resolution sources. Still as it has improved internal resolution rules (which leave no room for ambiguity) in some edge cases it may report errors on which old parser passed by.
+
+It's recommended to expose all errors that eventually new resolver may report (those will be an unconditional errors in v3). You can turn that behavior on by adding `variablesResolutionMode: 20210326` to service configuration
+
+<a name="AWS_HTTP_API_USE_PROVIDER_TAGS"><div>&nbsp;</div></a>
+
+## Http Api provider tags
+
+Deprecation code: `AWS_HTTP_API_USE_PROVIDER_TAGS`
+
+Starting with v3.0.0, `provider.tags` will be applied to Http Api Gateway by default
+Set `provider.httpApi.useProviderTags` to `true` to adapt to the new behavior now.
+
+<a name="MISSING_COMMANDS_OR_OPTIONS_AT_CONSTRUCTION"><div>&nbsp;</div></a>
+
+## `Serverless` constructor `config.commands` and `config.options` requirement
+
+Deprecation code: `MISSING_COMMANDS_OR_OPTIONS_AT_CONSTRUCTION`
+
+_Note: Applies only to eventual programmatic usage of the Framework_
+
+`Serverless` constructor was refactored to depend on CLI commands and arguments, to be resolved externally and passed to its constructor with `config.commands` and `config.options`. Starting from v3.0.0 CLI arguments will not be resolved internally.
+
+<a name="MISSING_SERVICE_CONFIGURATION"><div>&nbsp;</div></a>
+
+## `Serverless` constructor service configuration dependency
+
+Deprecation code: `MISSING_SERVICE_CONFIGURATION`
+
+_Note: Applies only to eventual programmatic usage of the Framework_
+
+`Serverless` constructor was refactored to depend on service configuration being resolved externally and passed to its constructor with following options:
+
+- `configuration` - Service configuration (JSON serializable plain object)
+- `serviceDir` - Directory in which service is placed (All path references in service configuration will be resolved against this path)
+- `configurationFilename` - Name of configuration file (e.g. `serverless.yml`).
+
+Starting from v3.0.0 configuration data will not be resolved internally, and if `Serverless` is invoked in service context, all three options will have to be provided
+
+<a name="NESTED_CUSTOM_CONFIGURATION_PATH"><div>&nbsp;</div></a>
+
+## Service configurations should not be nested in service sub directories
+
+Deprecation code: `NESTED_CUSTOM_CONFIGURATION_PATH`
+
+_Note: Applies only to eventual programmatic usage of the Framework_
+
+Service configuration in all cases should be put at root folder of a service.
+All paths in this configuration are resolved against service directory, and it's also the case if configuration is nested in sub directory.
+
+To avoid confusing behavior starting with v3.0.0 Framework will no longer permit to rely on configurations placed in sub directories
+
+<a name="MISSING_SERVICE_CONFIGURATION_PATH"><div>&nbsp;</div></a>
+
+## `Serverless` constructor service configuration dependency
+
+Deprecation code: `MISSING_SERVICE_CONFIGURATION_PATH`
+
+_Note: Applies only to eventual programmatic usage of the Framework_
+
+`Serverless` constructor was refactored to depend on service configuration being resolved externally and passed to its constructor with following options:
+
+- `configuration` - Service configuration (JSON serializable plain object)
+- `serviceDir` - Directory in which service is placed (All path references in service configuration will be resolved against this path)
+- `configurationFilename` - Name of configuration file (e.g. `serverless.yml`).
+
+Starting from v3.0.0 configuration data will not be resolved internally, and if `Serverless` is invoked in service context, all three options will have to be provided
+
+<a name="VARIABLES_ERROR_ON_UNRESOLVED"><div>&nbsp;</div></a>
+
+## Erroring on unresolved variable references
+
+Deprecation code: `VARIABLES_ERROR_ON_UNRESOLVED`
+
+Starting with v3.0.0, references to variables that cannot be resolved will result in an error being thrown.
+
+Adapt to this behaviour now by adding `unresolvedVariablesNotificationMode: error` to service configuration.
+
+<a name="PROVIDER_IAM_SETTINGS"><div>&nbsp;</div></a>
+
+## Grouping IAM settings under `provider.iam`
+
+Deprecation code: `PROVIDER_IAM_SETTINGS`
+
+Staring with v3.0.0, all IAM-related settings of _provider_ including `iamRoleStatements`, `iamManagedPolicies`, `role` and `cfnRole` will be grouped under `iam` property. Refer to the[IAM Guide](/framework/docs/providers/aws/guide/iam.md).
+
+- `provider.role` -> `provider.iam.role`
+- `provider.rolePermissionsBoundary` -> `provider.iam.role.permissionsBoundary`
+- `provider.iamRoleStatements` -> `provider.iam.role.statements`
+- `provider.iamManagedPolicies` -> `provider.iam.role.managedPolicies`
+- `provider.cfnRole` -> `provider.iam.deploymentRole`
+
+In addition, a prior update had documented the new Permissions Boundary property as `iam.role.permissionBoundary`. This
+has now been deprecated in favor of `iam.role.permissionsBoundary` to match the CloudFormation property.
 
 <a name="AWS_API_GATEWAY_SPECIFIC_KEYS"><div>&nbsp;</div></a>
 
@@ -34,9 +227,11 @@ Org, app, service, stage, and region are required to resolve variables when logg
 
 Deprecation code: `LAMBDA_HASHING_VERSION_V2`
 
-Starting with v3.0.0, the default value of `lambdaHashingVersion` will be equal to `20201221`. You can adapt to this behavior now, by setting `provider.lambdaHashingVersion` to `20201221`.
+Resolution of lambda version hashes was improved with better (fixed deterministism issues) algorithm, which will be used starting with v3.0.0
 
-When trying to `sls deploy` for the first time after migration to new `lambdaHashingVersion`, you might encounter an error, similar to the one below:
+You can adapt your services to use it now, by setting `provider.lambdaHashingVersion` to `20201221`.
+
+**Notice:** If you apply this on already deployed service without any changes to lambda code, you might encounter an error similar to the one below:
 
 ```
   Serverless Error ---------------------------------------
@@ -44,7 +239,7 @@ When trying to `sls deploy` for the first time after migration to new `lambdaHas
   An error occurred: FooLambdaVersion3IV5NZ3sE5T2UFimCOai2Tc6eCaW7yIYOP786U0Oc - A version for this Lambda function exists ( 11 ). Modify the function to create a new version..
 ```
 
-It is an expected behavior, to avoid it, you need to modify your function(s) code and try to redeploy it again. One common approach is to modify an utility function that is used by all/most of your Lambda functions.
+It is an expected behavior. AWS complains here that received a different hash for very same lambda configuration. To workaround that, you need to modify your function(s) code and try to redeploy it again. One common approach is to modify an utility function that is used by all/most of your Lambda functions.
 
 <a name="LOAD_VARIABLES_FROM_ENV_FILES"><div>&nbsp;</div></a>
 
@@ -80,11 +275,13 @@ Deprecation code: `CLOUDFRONT_CACHE_BEHAVIOR_FORWARDED_VALUES_AND_TTL`
 
 Deprecation code: `AWS_API_GATEWAY_NAME_STARTING_WITH_SERVICE`
 
+_Note_: This deprecation notice has been removed and the behavior won't be enforced with next major. Below you can find original description of the deprecation. You can still continue using `shouldStartNameWithService` property to adapt to the new convention of API Gateway name.
+
 Starting with v3.0.0, API Gateway naming will be changed from `${stage}-${service}` to `${service}-${stage}`.
 
 Adapt to this convention now by setting `provider.apiGateway.shouldStartNameWithService` to `true`.
 
-Eventually if you have a strong reason to stick to current convention, you may ensure it's kept after upgrading by setting: `provider.apiName: ${opt:stage, self:provider.stage, 'dev'}`
+Eventually if you have a strong reason to stick to current convention, you may ensure it's kept after upgrading by setting: `provider.apiName: ${sls:stage}`
 
 <a name="ALEXA_SKILL_EVENT_WITHOUT_APP_ID"><div>&nbsp;</div></a>
 

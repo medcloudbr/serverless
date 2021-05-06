@@ -6,10 +6,13 @@ const chai = require('chai');
 const overrideEnv = require('process-utils/override-env');
 const cjsResolve = require('ncjsm/resolve/sync');
 const spawn = require('child-process-ext/spawn');
+const overrideArgv = require('process-utils/override-argv');
 const resolveAwsEnv = require('@serverless/test/resolve-env');
 const Serverless = require('../../../../lib/Serverless');
 const CLI = require('../../../../lib/classes/CLI');
+const resolveInput = require('../../../../lib/cli/resolve-input');
 const Create = require('../../../../lib/plugins/create/create');
+const ServerlessError = require('../../../../lib/serverless-error');
 
 const path = require('path');
 const fs = require('fs');
@@ -393,14 +396,14 @@ describe('PluginManager', () => {
       case 'ServicePluginMock2':
         return { realPath: pluginPath };
       case './RelativePath/ServicePluginMock2':
-        return { realPath: `${servicePath}/RelativePath/ServicePluginMock2` };
+        return { realPath: `${serviceDir}/RelativePath/ServicePluginMock2` };
       default:
         return cjsResolve(directory, pluginPath);
     }
   };
 
   let restoreEnv;
-  let servicePath;
+  let serviceDir;
   let PluginManager = proxyquire('../../../../lib/classes/PluginManager', {
     'ncjsm/resolve/sync': resolveStub,
   });
@@ -411,7 +414,7 @@ describe('PluginManager', () => {
     serverless.cli = new CLI();
     serverless.processedInput = { commands: [], options: {} };
     pluginManager = new PluginManager(serverless);
-    servicePath = pluginManager.serverless.config.servicePath = 'foo';
+    serviceDir = pluginManager.serverless.serviceDir = 'foo';
   });
 
   afterEach(() => restoreEnv());
@@ -469,8 +472,8 @@ describe('PluginManager', () => {
       });
       pluginManager = new PluginManager(serverless);
       pluginManager.serverless.config = { servicePath: 'somePath' };
-      servicePath = pluginManager.serverless.config.servicePath;
-      cacheFilePath = getCacheFilePath(servicePath);
+      serviceDir = pluginManager.serverless.serviceDir;
+      cacheFilePath = getCacheFilePath(serviceDir);
       getCommandsStub = sinon.stub(pluginManager, 'getCommands');
     });
 
@@ -707,7 +710,7 @@ describe('PluginManager', () => {
     it('should throw an error when trying to load unknown plugin', () => {
       const servicePlugins = ['ServicePluginMock3', 'ServicePluginMock1'];
 
-      expect(() => pluginManager.loadAllPlugins(servicePlugins)).to.throw(serverless.classes.Error);
+      expect(() => pluginManager.loadAllPlugins(servicePlugins)).to.throw(ServerlessError);
     });
 
     it('should not throw error when trying to load unknown plugin with help flag', () => {
@@ -715,8 +718,9 @@ describe('PluginManager', () => {
 
       pluginManager.setCliOptions({ help: true });
 
-      expect(() => pluginManager.loadAllPlugins(servicePlugins)).to.not.throw(
-        serverless.classes.Error
+      resolveInput.clear();
+      overrideArgv({ args: ['serverless', '--help'] }, () =>
+        expect(() => pluginManager.loadAllPlugins(servicePlugins)).to.not.throw(ServerlessError)
       );
     });
 
@@ -731,13 +735,10 @@ describe('PluginManager', () => {
       const cliCommandsMock = ['plugin'];
       pluginManager.setCliCommands(cliCommandsMock);
 
-      expect(() => pluginManager.loadAllPlugins(servicePlugins)).to.not.throw(
-        serverless.classes.Error
-      );
+      expect(() => pluginManager.loadAllPlugins(servicePlugins)).to.not.throw(ServerlessError);
     });
 
     afterEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       mockRequire.stop('ServicePluginMock1');
       mockRequire.stop('ServicePluginMock2');
       mockRequire.stop('BrokenPluginMock');
@@ -747,10 +748,9 @@ describe('PluginManager', () => {
 
   describe('#resolveServicePlugins()', () => {
     beforeEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       mockRequire('ServicePluginMock1', ServicePluginMock1);
       // Plugins loaded via a relative path should be required relative to the service path
-      mockRequire(`${servicePath}/RelativePath/ServicePluginMock2`, ServicePluginMock2);
+      mockRequire(`${serviceDir}/RelativePath/ServicePluginMock2`, ServicePluginMock2);
     });
 
     it('should resolve the service plugins', () => {
@@ -774,7 +774,6 @@ describe('PluginManager', () => {
     });
 
     afterEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       mockRequire.stop('ServicePluginMock1');
       mockRequire.stop('ServicePluginMock2');
     });
@@ -791,7 +790,7 @@ describe('PluginManager', () => {
 
       parsePluginsObjectAndVerifyResult(servicePlugins, {
         modules: servicePlugins,
-        localPath: path.join(serverless.config.servicePath, '.serverless_plugins'),
+        localPath: path.join(serverless.serviceDir, '.serverless_plugins'),
       });
     });
 
@@ -812,7 +811,7 @@ describe('PluginManager', () => {
 
       parsePluginsObjectAndVerifyResult(servicePlugins, {
         modules: [],
-        localPath: path.join(serverless.config.servicePath, '.serverless_plugins'),
+        localPath: path.join(serverless.serviceDir, '.serverless_plugins'),
       });
     });
 
@@ -821,7 +820,7 @@ describe('PluginManager', () => {
 
       parsePluginsObjectAndVerifyResult(servicePlugins, {
         modules: [],
-        localPath: path.join(serverless.config.servicePath, '.serverless_plugins'),
+        localPath: path.join(serverless.serviceDir, '.serverless_plugins'),
       });
     });
 
@@ -833,7 +832,7 @@ describe('PluginManager', () => {
 
       parsePluginsObjectAndVerifyResult(servicePlugins, {
         modules: servicePlugins.modules,
-        localPath: path.join(serverless.config.servicePath, '.serverless_plugins'),
+        localPath: path.join(serverless.serviceDir, '.serverless_plugins'),
       });
     });
   });
@@ -1164,7 +1163,6 @@ describe('PluginManager', () => {
 
   describe('#getEvents()', () => {
     beforeEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       pluginManager.addPlugin(SynchronousPluginMock);
     });
 
@@ -1195,7 +1193,6 @@ describe('PluginManager', () => {
 
   describe('#getHooks()', () => {
     beforeEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       pluginManager.addPlugin(SynchronousPluginMock);
     });
 
@@ -1224,7 +1221,6 @@ describe('PluginManager', () => {
 
   describe('#getPlugins()', () => {
     beforeEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       mockRequire('ServicePluginMock1', ServicePluginMock1);
       mockRequire('ServicePluginMock2', ServicePluginMock2);
     });
@@ -1240,7 +1236,6 @@ describe('PluginManager', () => {
     });
 
     afterEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       mockRequire.stop('ServicePluginMock1');
       mockRequire.stop('ServicePluginMock2');
     });
@@ -1251,7 +1246,7 @@ describe('PluginManager', () => {
       pluginManager.addPlugin(EntrypointPluginMock);
 
       expect(() => pluginManager.validateCommand(['mycmd', 'mysubcmd'])).to.not.throw(
-        serverless.classes.Error
+        ServerlessError
       );
     });
 
@@ -1259,7 +1254,7 @@ describe('PluginManager', () => {
       pluginManager.addPlugin(ContainerPluginMock);
 
       expect(() => pluginManager.validateCommand(['mycontainer', 'mysubcmd'])).to.not.throw(
-        serverless.classes.Error
+        ServerlessError
       );
     });
 
@@ -1267,14 +1262,6 @@ describe('PluginManager', () => {
       pluginManager.addPlugin(EntrypointPluginMock);
 
       expect(() => pluginManager.validateCommand(['myep', 'mysubep'])).to.throw(
-        /command ".*" not found/
-      );
-    });
-
-    it('should throw on container', () => {
-      pluginManager.addPlugin(ContainerPluginMock);
-
-      expect(() => pluginManager.validateCommand(['mycontainer'])).to.throw(
         /command ".*" not found/
       );
     });
@@ -1345,13 +1332,12 @@ describe('PluginManager', () => {
 
     beforeEach(() => {
       serverlessInstance = new Serverless();
-      serverlessInstance.config.servicePath = 'my-service';
+      serverlessInstance.configurationInput = null;
+      serverlessInstance.serviceDir = 'my-service';
       pluginManagerInstance = new PluginManager(serverlessInstance);
     });
 
     it('should continue loading if the configDependent property is absent', () => {
-      pluginManagerInstance.serverlessConfigFile = null;
-
       pluginManagerInstance.commands = {
         foo: {},
       };
@@ -1362,8 +1348,6 @@ describe('PluginManager', () => {
     });
 
     it('should load if the configDependent property is false and config is null', () => {
-      pluginManagerInstance.serverlessConfigFile = null;
-
       pluginManagerInstance.commands = {
         foo: {
           configDependent: false,
@@ -1376,8 +1360,6 @@ describe('PluginManager', () => {
     });
 
     it('should throw an error if configDependent is true and no config is found', () => {
-      pluginManagerInstance.serverlessConfigFile = null;
-
       pluginManagerInstance.commands = {
         foo: {
           configDependent: true,
@@ -1392,8 +1374,6 @@ describe('PluginManager', () => {
     });
 
     it('should throw an error if configDependent is true and config is an empty string', () => {
-      pluginManagerInstance.serverlessConfigFile = '';
-
       pluginManagerInstance.commands = {
         foo: {
           configDependent: true,
@@ -1408,7 +1388,7 @@ describe('PluginManager', () => {
     });
 
     it('should load if the configDependent property is true and config exists', () => {
-      pluginManagerInstance.serverlessConfigFile = {
+      pluginManagerInstance.serverless.configurationInput = {
         servicePath: 'foo',
       };
 
@@ -1514,15 +1494,7 @@ describe('PluginManager', () => {
 
       const commandsArray = ['myep'];
 
-      expect(pluginManager.run(commandsArray)).to.be.rejectedWith(Error);
-    });
-
-    it('should throw an error when the given command is a container', () => {
-      pluginManager.addPlugin(ContainerPluginMock);
-
-      const commandsArray = ['mycontainer'];
-
-      expect(pluginManager.run(commandsArray)).to.be.rejectedWith(Error);
+      return expect(pluginManager.run(commandsArray)).to.be.rejectedWith(Error);
     });
 
     it('should NOT throw an error when the given command is a child of a container', () => {
@@ -1530,7 +1502,7 @@ describe('PluginManager', () => {
 
       const commandsArray = ['mycontainer', 'mysubcmd'];
 
-      expect(pluginManager.run(commandsArray)).to.not.be.rejectedWith(Error);
+      return expect(pluginManager.run(commandsArray)).to.not.be.rejectedWith(Error);
     });
 
     it('should throw an error when the given command is a child of an entrypoint', () => {
@@ -1538,7 +1510,7 @@ describe('PluginManager', () => {
 
       const commandsArray = ['mysubcmd'];
 
-      expect(pluginManager.run(commandsArray)).to.be.rejectedWith(Error);
+      return expect(pluginManager.run(commandsArray)).to.be.rejectedWith(Error);
     });
 
     it('should show warning if in debug mode and the given command has no hooks', () => {
@@ -1612,7 +1584,6 @@ describe('PluginManager', () => {
 
     describe('when using a synchronous hook function', () => {
       beforeEach(() => {
-        // eslint-disable-line prefer-arrow-callback
         pluginManager.addPlugin(SynchronousPluginMock);
       });
 
@@ -1637,7 +1608,6 @@ describe('PluginManager', () => {
 
     describe('when using a promise based hook function', () => {
       beforeEach(() => {
-        // eslint-disable-line prefer-arrow-callback
         pluginManager.addPlugin(PromisePluginMock);
       });
 
@@ -1662,7 +1632,6 @@ describe('PluginManager', () => {
 
     describe('when using provider specific plugins', () => {
       beforeEach(() => {
-        // eslint-disable-line prefer-arrow-callback
         pluginManager.serverless.service.provider.name = 'provider1';
 
         pluginManager.addPlugin(Provider1PluginMock);
@@ -1783,6 +1752,7 @@ describe('PluginManager', () => {
         },
       };
     });
+
     it('should give a suggestion for an unknown command', (done) => {
       try {
         pluginManager.getCommand(['creet']);
@@ -1813,14 +1783,12 @@ describe('PluginManager', () => {
   });
 
   describe('#spawn()', () => {
-    it('should throw an error when the given command is not available', () => {
+    it('should throw an error when the given command is not available', async () => {
       pluginManager.addPlugin(EntrypointPluginMock);
 
       const commandsArray = ['foo'];
 
-      expect(() => {
-        pluginManager.spawn(commandsArray);
-      }).to.throw(Error);
+      return expect(pluginManager.spawn(commandsArray)).to.eventually.be.rejectedWith(Error);
     });
 
     it('should show warning in debug mode and when the given command has no hooks', () => {
@@ -1883,14 +1851,6 @@ describe('PluginManager', () => {
     });
 
     describe('when invoking a container', () => {
-      it('should fail', () => {
-        pluginManager.addPlugin(ContainerPluginMock);
-
-        const commandsArray = ['mycontainer'];
-
-        return expect(() => pluginManager.spawn(commandsArray)).to.throw(/command ".*" not found/);
-      });
-
       it('should spawn nested commands', () => {
         pluginManager.addPlugin(ContainerPluginMock);
 
@@ -1957,15 +1917,13 @@ describe('PluginManager', () => {
 
   describe('Plugin / Load local plugins', () => {
     const cwd = process.cwd();
-    let serviceDir;
     let tmpDir;
     beforeEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       tmpDir = getTmpDirPath();
       serviceDir = path.join(tmpDir, 'service');
       fse.mkdirsSync(serviceDir);
       process.chdir(serviceDir);
-      pluginManager.serverless.config.servicePath = serviceDir;
+      pluginManager.serverless.serviceDir = serviceDir;
     });
 
     it('should load plugins from .serverless_plugins', () => {
@@ -2026,7 +1984,6 @@ describe('PluginManager', () => {
     });
 
     afterEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       process.chdir(cwd);
       try {
         fse.removeSync(tmpDir);
@@ -2040,11 +1997,9 @@ describe('PluginManager', () => {
     this.timeout(1000 * 60 * 10);
 
     let serverlessInstance;
-    let serviceDir;
     const serverlessExec = require('../../../serverlessBinary');
 
     beforeEach(() => {
-      // eslint-disable-line prefer-arrow-callback
       serverlessInstance = new Serverless();
       return serverlessInstance.init().then(() => {
         // Cannot rely on shebang in severless.js to invoke script using NodeJS on Windows.
@@ -2079,11 +2034,13 @@ describe('PluginManager', () => {
         'plugins:\n  - local-plugin\n  - parent-plugin'
       );
 
-      return spawn(serverlessExec, [], { env, cwd: serviceDir }).then(({ stdoutBuffer }) => {
-        const stringifiedOutput = String(stdoutBuffer);
-        expect(stringifiedOutput).to.contain('SynchronousPluginMock');
-        expect(stringifiedOutput).to.contain('PromisePluginMock');
-      });
+      return spawn(serverlessExec, ['--help'], { env, cwd: serviceDir }).then(
+        ({ stdoutBuffer }) => {
+          const stringifiedOutput = String(stdoutBuffer);
+          expect(stringifiedOutput).to.contain('SynchronousPluginMock');
+          expect(stringifiedOutput).to.contain('PromisePluginMock');
+        }
+      );
     });
 
     afterEach(() => {

@@ -3,7 +3,7 @@
 const { expect } = require('chai');
 const log = require('log').get('serverless:test');
 const awsRequest = require('@serverless/test/aws-request');
-const fixtures = require('../fixtures');
+const fixtures = require('../fixtures/programmatic');
 const { confirmCloudWatchLogs } = require('../utils/misc');
 
 const { deployService, removeService, fetch } = require('../utils/integration');
@@ -12,7 +12,7 @@ describe('HTTP API Integration Test', function () {
   this.timeout(1000 * 60 * 20); // Involves time-taking deploys
   let endpoint;
   let stackName;
-  let servicePath;
+  let serviceDir;
   const stage = 'dev';
 
   const resolveEndpoint = async () => {
@@ -66,6 +66,15 @@ describe('HTTP API Integration Test', function () {
                   issuerUrl: `https://cognito-idp.us-east-1.amazonaws.com/${poolId}`,
                   audience: clientId,
                 },
+                simpleCustomLambdaAuthorizer: {
+                  type: 'request',
+                  functionName: 'simpleCustomAuthorizer',
+                  enableSimpleResponses: true,
+                },
+                standardCustomLambdaAuthorizer: {
+                  type: 'request',
+                  functionName: 'standardCustomAuthorizer',
+                },
               },
             },
             logs: { httpApi: true },
@@ -83,20 +92,44 @@ describe('HTTP API Integration Test', function () {
             other: {
               timeout: 1,
             },
+            behindSimpleCustomAuthorizer: {
+              handler: 'index.handler',
+              events: [
+                {
+                  httpApi: {
+                    method: 'GET',
+                    path: '/behind-simple-authorizer',
+                    authorizer: 'simpleCustomLambdaAuthorizer',
+                  },
+                },
+              ],
+            },
+            behindStandardCustomAuthorizer: {
+              handler: 'index.handler',
+              events: [
+                {
+                  httpApi: {
+                    method: 'GET',
+                    path: '/behind-standard-authorizer',
+                    authorizer: 'standardCustomLambdaAuthorizer',
+                  },
+                },
+              ],
+            },
           },
         },
       });
-      ({ servicePath } = serviceData);
+      ({ servicePath: serviceDir } = serviceData);
       const serviceName = serviceData.serviceConfig.service;
       stackName = `${serviceName}-${stage}`;
-      await deployService(servicePath);
+      await deployService(serviceDir);
       return resolveEndpoint();
     });
 
     after(async () => {
       await awsRequest('CognitoIdentityServiceProvider', 'deleteUserPool', { UserPoolId: poolId });
-      if (!servicePath) return;
-      await removeService(servicePath);
+      if (!serviceDir) return;
+      await removeService(serviceDir);
     });
 
     it('should expose an accessible POST HTTP endpoint', async () => {
@@ -170,6 +203,38 @@ describe('HTTP API Integration Test', function () {
       expect(json).to.deep.equal({ method: 'GET', path: '/foo' });
     });
 
+    it('should expose a GET HTTP endpoint backed by simple custom request authorization', async () => {
+      const testEndpoint = `${endpoint}/behind-simple-authorizer`;
+
+      const responseUnauthorized = await fetch(testEndpoint, {
+        method: 'GET',
+      });
+      expect(responseUnauthorized.status).to.equal(403);
+
+      const responseAuthorized = await fetch(testEndpoint, {
+        method: 'GET',
+        headers: { Authorization: 'secretToken' },
+      });
+      const json = await responseAuthorized.json();
+      expect(json).to.deep.equal({ method: 'GET', path: '/behind-simple-authorizer' });
+    });
+
+    it('should expose a GET HTTP endpoint backed by standard custom request authorization', async () => {
+      const testEndpoint = `${endpoint}/behind-standard-authorizer`;
+
+      const responseUnauthorized = await fetch(testEndpoint, {
+        method: 'GET',
+      });
+      expect(responseUnauthorized.status).to.equal(403);
+
+      const responseAuthorized = await fetch(testEndpoint, {
+        method: 'GET',
+        headers: { Authorization: 'secretToken' },
+      });
+      const json = await responseAuthorized.json();
+      expect(json).to.deep.equal({ method: 'GET', path: '/behind-standard-authorizer' });
+    });
+
     it('should expose access logs when configured to', () =>
       confirmCloudWatchLogs(`/aws/http-api/${stackName}`, async () => {
         const response = await fetch(`${endpoint}/some-post`, { method: 'POST' });
@@ -182,10 +247,10 @@ describe('HTTP API Integration Test', function () {
   describe('Catch-all endpoints', () => {
     before(async () => {
       const serviceData = await fixtures.setup('httpApiCatchAll');
-      ({ servicePath } = serviceData);
+      ({ servicePath: serviceDir } = serviceData);
       const serviceName = serviceData.serviceConfig.service;
       stackName = `${serviceName}-${stage}`;
-      await deployService(servicePath);
+      await deployService(serviceDir);
       return resolveEndpoint();
     });
 
@@ -194,7 +259,7 @@ describe('HTTP API Integration Test', function () {
       // TODO: Remove once properly diagnosed
       if (this.test.parent.tests.some((test) => test.state === 'failed')) return;
       log.notice('Removing service...');
-      await removeService(servicePath);
+      await removeService(serviceDir);
     });
 
     it('should catch all root endpoint', async () => {
@@ -243,15 +308,15 @@ describe('HTTP API Integration Test', function () {
           provider: { httpApi: { id: httpApiId } },
         },
       });
-      ({ servicePath } = serviceData);
+      ({ servicePath: serviceDir } = serviceData);
       serviceName = serviceData.serviceConfig.service;
       stackName = `${serviceName}-${stage}`;
-      await deployService(servicePath);
+      await deployService(serviceDir);
     });
 
     after(async () => {
       if (serviceName) {
-        await removeService(servicePath);
+        await removeService(serviceDir);
       }
       await removeService(exportServicePath);
     });

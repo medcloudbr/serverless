@@ -4,7 +4,6 @@ const expect = require('chai').expect;
 const Serverless = require('../../../lib/Serverless');
 const semverRegex = require('semver-regex');
 const path = require('path');
-const yaml = require('js-yaml');
 const sinon = require('sinon');
 const BbPromise = require('bluebird');
 
@@ -14,10 +13,10 @@ const Utils = require('../../../lib/classes/Utils');
 const Service = require('../../../lib/classes/Service');
 const ConfigSchemaHandler = require('../../../lib/classes/ConfigSchemaHandler');
 const CLI = require('../../../lib/classes/CLI');
-const { ServerlessError } = require('../../../lib/classes/Error');
-const { getTmpDirPath } = require('../../utils/fs');
+const ServerlessError = require('../../../lib/serverless-error');
+const conditionallyLoadDotenv = require('../../../lib/cli/conditionally-load-dotenv');
 const runServerless = require('../../utils/run-serverless');
-const fixtures = require('../../fixtures');
+const fixtures = require('../../fixtures/programmatic');
 const fs = require('fs');
 
 describe('Serverless', () => {
@@ -36,11 +35,8 @@ describe('Serverless', () => {
     });
 
     it('should set an empty config object if no config object passed', () => {
-      // we're only expecting to have "serverless", "serverlessPath" and "servicePath"
-      expect(Object.keys(serverless.config).length).to.equal(3);
       expect(Object.keys(serverless.config)).to.include('serverless');
       expect(Object.keys(serverless.config)).to.include('serverlessPath');
-      expect(Object.keys(serverless.config)).to.include('servicePath');
     });
 
     it('should set an empty providers object', () => {
@@ -69,19 +65,6 @@ describe('Serverless', () => {
 
     it('should set the ConfigSchemaHandler class instance', () => {
       expect(serverless.configSchemaHandler).to.be.instanceof(ConfigSchemaHandler);
-    });
-
-    it('should set the servicePath property if it was set in the config object', () => {
-      const configObj = { servicePath: 'some/path' };
-      const serverlessWithConfig = new Serverless(configObj);
-
-      expect(serverlessWithConfig.config.servicePath).to.equal('some/path');
-    });
-
-    // note: we only test if the property is there
-    // the test if the correct servicePath is set is done in the Utils class test file
-    it('should set the servicePath property if no config object is given', () => {
-      expect(serverless.config.servicePath).to.not.equal(undefined);
     });
 
     it('should have a config object', () => {
@@ -122,21 +105,6 @@ describe('Serverless', () => {
   });
 
   describe('#init()', () => {
-    let loadAllPluginsStub;
-    let updateAutocompleteCacheFileStub;
-
-    beforeEach(() => {
-      loadAllPluginsStub = sinon.stub(serverless.pluginManager, 'loadAllPlugins').returns();
-      updateAutocompleteCacheFileStub = sinon
-        .stub(serverless.pluginManager, 'updateAutocompleteCacheFile')
-        .resolves();
-    });
-
-    afterEach(() => {
-      serverless.pluginManager.loadAllPlugins.restore();
-      serverless.pluginManager.updateAutocompleteCacheFile.restore();
-    });
-
     it('should set an instanceId', () =>
       serverless.init().then(() => {
         expect(serverless.instanceId).to.match(/\d/);
@@ -163,38 +131,6 @@ describe('Serverless', () => {
       serverless.init().then(() => {
         expect(serverless.processedInput).to.not.deep.equal({});
       }));
-
-    it('should resolve after loading the service', () => {
-      const SUtils = new Utils();
-      const tmpDirPath = getTmpDirPath();
-      const serverlessYml = {
-        service: 'new-service',
-        provider: 'aws',
-        custom: {},
-        plugins: ['testPlugin'],
-        functions: {
-          functionA: {},
-        },
-        resources: {},
-        package: {
-          exclude: ['exclude-me'],
-          include: ['include-me'],
-          artifact: 'some/path/foo.zip',
-        },
-      };
-
-      SUtils.writeFileSync(path.join(tmpDirPath, 'serverless.yml'), yaml.dump(serverlessYml));
-
-      serverless.config.update({ servicePath: tmpDirPath });
-      serverless.pluginManager.cliOptions = {
-        stage: 'dev',
-      };
-
-      return serverless.init().then(() => {
-        expect(loadAllPluginsStub.calledOnce).to.equal(true);
-        expect(updateAutocompleteCacheFileStub.calledOnce).to.equal(true);
-      });
-    });
   });
 
   describe('#run()', () => {
@@ -286,17 +222,17 @@ describe('Serverless', () => {
   });
 });
 
-describe('Serverless [new tests]', () => {
+describe('test/unit/lib/Serverless.test.js', () => {
   describe('When local version available', () => {
     describe('When running global version', () => {
       it('Should fallback to local version when it is found and "enableLocalInstallationFallback" is not set', () =>
         runServerless({
           fixture: 'locallyInstalledServerless',
-          cliArgs: ['-v'],
+          command: 'print',
           modulesCacheStub: {},
         }).then(({ serverless }) => {
           expect(Array.from(serverless.triggeredDeprecations)).to.deep.equal([]);
-          expect(serverless.isInvokedByGlobalInstallation).to.be.true;
+          expect(serverless._isInvokedByGlobalInstallation).to.be.true;
           expect(serverless.isLocallyInstalled).to.be.true;
           expect(serverless.isLocalStub).to.be.true;
         }));
@@ -306,14 +242,14 @@ describe('Serverless [new tests]', () => {
         runServerless({
           fixture: 'locallyInstalledServerless',
           configExt: { enableLocalInstallationFallback: false },
-          cliArgs: ['-v'],
+          command: 'print',
           modulesCacheStub: {},
         }).then(({ serverless }) => {
           serverlessWithDisabledLocalInstallationFallback = serverless;
           expect(Array.from(serverless.triggeredDeprecations)).to.deep.equal([
             'DISABLE_LOCAL_INSTALLATION_FALLBACK_SETTING',
           ]);
-          expect(serverless.isInvokedByGlobalInstallation).to.be.false;
+          expect(serverless._isInvokedByGlobalInstallation).to.be.false;
           expect(serverless.isLocallyInstalled).to.be.false;
           expect(serverless.isLocalStub).to.not.exist;
         }));
@@ -325,13 +261,13 @@ describe('Serverless [new tests]', () => {
         runServerless({
           fixture: 'locallyInstalledServerless',
           configExt: { enableLocalInstallationFallback: true },
-          cliArgs: ['-v'],
+          command: 'print',
           modulesCacheStub: {},
         }).then(({ serverless }) => {
           expect(Array.from(serverless.triggeredDeprecations)).to.deep.equal([
             'DISABLE_LOCAL_INSTALLATION_FALLBACK_SETTING',
           ]);
-          expect(serverless.isInvokedByGlobalInstallation).to.be.true;
+          expect(serverless._isInvokedByGlobalInstallation).to.be.true;
           expect(serverless.isLocallyInstalled).to.be.true;
           expect(serverless.isLocalStub).to.be.true;
         }));
@@ -339,14 +275,16 @@ describe('Serverless [new tests]', () => {
 
     describe('When running local version', () => {
       it('Should run without notice', () =>
-        fixtures.setup('locallyInstalledServerless').then(({ servicePath }) =>
+        fixtures.setup('locallyInstalledServerless').then(({ servicePath: serviceDir }) =>
           runServerless({
-            serverlessDir: path.resolve(servicePath, 'node_modules/serverless'),
-            cwd: servicePath,
-            cliArgs: ['-v'],
+            serverlessDir: path.resolve(serviceDir, 'node_modules/serverless'),
+            cwd: serviceDir,
+            command: 'print',
           }).then(({ serverless }) => {
-            expect(Array.from(serverless.triggeredDeprecations)).to.deep.equal([]);
-            expect(serverless.isInvokedByGlobalInstallation).to.be.false;
+            expect(Array.from(serverless.triggeredDeprecations)).to.not.include(
+              'DISABLE_LOCAL_INSTALLATION_FALLBACK_SETTING'
+            );
+            expect(serverless._isInvokedByGlobalInstallation).to.be.false;
             expect(serverless.isLocallyInstalled).to.be.true;
             expect(serverless.isLocalStub).to.be.true;
           })
@@ -356,10 +294,10 @@ describe('Serverless [new tests]', () => {
 
   describe('When local version not available', () => {
     it('Should run without notice', () =>
-      runServerless({ fixture: 'aws', cliArgs: ['-v'], modulesCacheStub: {} }).then(
+      runServerless({ fixture: 'aws', command: 'print', modulesCacheStub: {} }).then(
         ({ serverless }) => {
           expect(Array.from(serverless.triggeredDeprecations)).to.deep.equal([]);
-          expect(serverless.isInvokedByGlobalInstallation).to.be.false;
+          expect(serverless._isInvokedByGlobalInstallation).to.be.false;
           expect(serverless.isLocallyInstalled).to.be.false;
           expect(serverless.isLocalStub).to.not.exist;
         }
@@ -367,10 +305,10 @@ describe('Serverless [new tests]', () => {
   });
 
   describe('When .env file is available', () => {
-    let servicePath;
+    let serviceDir;
 
     before(async () => {
-      servicePath = (
+      serviceDir = (
         await fixtures.setup('function', {
           configExt: {
             useDotenv: true,
@@ -383,31 +321,38 @@ describe('Serverless [new tests]', () => {
       ).servicePath;
 
       const defaultFileContent = 'DEFAULT_ENV_VARIABLE=valuefromdefault';
-      await fs.promises.writeFile(path.join(servicePath, '.env'), defaultFileContent);
-
-      const stage = 'testing';
-      const stageFileContent = 'STAGE_ENV_VARIABLE=valuefromstage';
-      await fs.promises.writeFile(path.join(servicePath, `.env.${stage}`), stageFileContent);
+      await fs.promises.writeFile(path.join(serviceDir, '.env'), defaultFileContent);
+      conditionallyLoadDotenv.clear();
     });
 
     it('Should load environment variables from default .env file if no matching stage', async () => {
       const result = await runServerless({
-        cwd: servicePath,
-        cliArgs: ['package'],
+        cwd: serviceDir,
+        command: 'package',
+        shouldUseLegacyVariablesResolver: true,
       });
 
       expect(result.serverless.service.custom.fromDefaultEnv).to.equal('valuefromdefault');
       expect(result.serverless.service.custom.fromStageEnv).to.be.undefined;
     });
+  });
 
-    it('Should load environment variables from stage .env file if matching stage', async () => {
-      const result = await runServerless({
-        cwd: servicePath,
-        cliArgs: ['-s', 'testing', 'package'],
-      });
+  describe('Legacy API interface', () => {
+    let serverless;
 
-      expect(result.serverless.service.custom.fromDefaultEnv).to.be.undefined;
-      expect(result.serverless.service.custom.fromStageEnv).to.equal('valuefromstage');
+    before(async () => {
+      ({ serverless } = await runServerless({
+        fixture: 'aws',
+        command: 'package',
+      }));
+    });
+
+    it('Ensure that instance is setup', async () => {
+      expect(serverless.variables).to.have.property('variableSyntax');
+    });
+
+    it('Ensure config.servicePath', async () => {
+      expect(serverless.config).to.have.property('servicePath');
     });
   });
 });

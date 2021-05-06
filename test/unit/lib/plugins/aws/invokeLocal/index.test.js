@@ -66,7 +66,7 @@ describe('AwsInvokeLocal', () => {
       'child-process-ext/spawn': spawnExtStub,
     });
     serverless = new Serverless();
-    serverless.config.servicePath = 'servicePath';
+    serverless.serviceDir = 'servicePath';
     serverless.cli = new CLI(serverless);
     serverless.processedInput = { commands: ['invoke'] };
     provider = new AwsProvider(serverless, options);
@@ -81,7 +81,7 @@ describe('AwsInvokeLocal', () => {
   describe('#extendedValidate()', () => {
     let backupIsTTY;
     beforeEach(() => {
-      serverless.config.servicePath = true;
+      serverless.serviceDir = true;
       serverless.service.environment = {
         vars: {},
         stages: {
@@ -163,12 +163,12 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('it should parse file if relative file path is provided', async () => {
-      serverless.config.servicePath = getTmpDirPath();
+      serverless.serviceDir = getTmpDirPath();
       const data = {
         testProp: 'testValue',
       };
       serverless.utils.writeFileSync(
-        path.join(serverless.config.servicePath, 'data.json'),
+        path.join(serverless.serviceDir, 'data.json'),
         JSON.stringify(data)
       );
       awsInvokeLocal.options.contextPath = 'data.json';
@@ -178,13 +178,13 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('it should parse file if absolute file path is provided', async () => {
-      serverless.config.servicePath = getTmpDirPath();
+      serverless.serviceDir = getTmpDirPath();
       const data = {
         event: {
           testProp: 'testValue',
         },
       };
-      const dataFile = path.join(serverless.config.servicePath, 'data.json');
+      const dataFile = path.join(serverless.serviceDir, 'data.json');
       serverless.utils.writeFileSync(dataFile, JSON.stringify(data));
       awsInvokeLocal.options.path = dataFile;
       awsInvokeLocal.options.contextPath = false;
@@ -194,13 +194,10 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('it should parse a yaml file if file path is provided', async () => {
-      serverless.config.servicePath = getTmpDirPath();
+      serverless.serviceDir = getTmpDirPath();
       const yamlContent = 'event: data';
 
-      serverless.utils.writeFileSync(
-        path.join(serverless.config.servicePath, 'data.yml'),
-        yamlContent
-      );
+      serverless.utils.writeFileSync(path.join(serverless.serviceDir, 'data.yml'), yamlContent);
       awsInvokeLocal.options.path = 'data.yml';
 
       await expect(awsInvokeLocal.extendedValidate()).to.be.fulfilled;
@@ -208,7 +205,7 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('it should require a js file if file path is provided', async () => {
-      serverless.config.servicePath = getTmpDirPath();
+      serverless.serviceDir = getTmpDirPath();
       const jsContent = [
         'module.exports = {',
         '  headers: { "Content-Type" : "application/json" },',
@@ -216,10 +213,7 @@ describe('AwsInvokeLocal', () => {
         '}',
       ].join('\n');
 
-      serverless.utils.writeFileSync(
-        path.join(serverless.config.servicePath, 'data.js'),
-        jsContent
-      );
+      serverless.utils.writeFileSync(path.join(serverless.serviceDir, 'data.js'), jsContent);
       awsInvokeLocal.options.path = 'data.js';
 
       await expect(awsInvokeLocal.extendedValidate()).to.be.fulfilled;
@@ -230,7 +224,7 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('it should reject error if file path does not exist', () => {
-      serverless.config.servicePath = getTmpDirPath();
+      serverless.serviceDir = getTmpDirPath();
       awsInvokeLocal.options.path = 'some/path';
 
       return expect(awsInvokeLocal.extendedValidate()).to.be.rejected;
@@ -240,7 +234,6 @@ describe('AwsInvokeLocal', () => {
   describe('#getCredentialEnvVars()', () => {
     it('returns empty object when credentials is not set', () => {
       provider.cachedCredentials = null;
-      serverless.service.provider.credentials = null;
 
       const credentialEnvVars = awsInvokeLocal.getCredentialEnvVars();
 
@@ -254,24 +247,6 @@ describe('AwsInvokeLocal', () => {
           secretAccessKey: 'SECRET',
           sessionToken: 'TOKEN',
         },
-      };
-      serverless.service.provider.credentials = null;
-
-      const credentialEnvVars = awsInvokeLocal.getCredentialEnvVars();
-
-      expect(credentialEnvVars).to.be.eql({
-        AWS_ACCESS_KEY_ID: 'ID',
-        AWS_SECRET_ACCESS_KEY: 'SECRET',
-        AWS_SESSION_TOKEN: 'TOKEN',
-      });
-    });
-
-    it('returns credential env vars from credentials config', () => {
-      provider.cachedCredentials = null;
-      serverless.service.provider.credentials = {
-        accessKeyId: 'ID',
-        secretAccessKey: 'SECRET',
-        sessionToken: 'TOKEN',
       };
 
       const credentialEnvVars = awsInvokeLocal.getCredentialEnvVars();
@@ -288,7 +263,7 @@ describe('AwsInvokeLocal', () => {
     let restoreEnv;
     beforeEach(() => {
       ({ restoreEnv } = overrideEnv());
-      serverless.config.servicePath = true;
+      serverless.serviceDir = true;
       serverless.service.provider = {
         environment: {
           providerVar: 'providerValue',
@@ -329,7 +304,7 @@ describe('AwsInvokeLocal', () => {
       expect(process.env.LANG).to.equal('en_US.UTF-8');
       expect(process.env.LD_LIBRARY_PATH).to.equal(
         '/usr/local/lib64/node-v4.3.x/lib:/lib64:/usr/lib64:/var/runtime:/var/runtime/lib:/var/task:/var/task/lib'
-      ); // eslint-disable-line max-len
+      );
       expect(process.env.LAMBDA_TASK_ROOT).to.equal('/var/task');
       expect(process.env.LAMBDA_RUNTIME_DIR).to.equal('/var/runtime');
       expect(process.env.AWS_REGION).to.equal('us-east-1');
@@ -556,7 +531,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('with done method', () => {
       it('should exit with error exit code', () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithSuccess', 'withErrorByDone');
 
@@ -564,7 +539,7 @@ describe('AwsInvokeLocal', () => {
       });
 
       it('should succeed if succeed', () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithSuccess', 'withMessageByDone');
 
@@ -574,19 +549,19 @@ describe('AwsInvokeLocal', () => {
 
     describe('with Lambda Proxy with application/json response', () => {
       it('should succeed if succeed', () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithSuccess', 'withMessageByLambdaProxy');
 
         expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain(
           '{\n    "statusCode": 200,\n    "headers": {\n        "Content-Type": "application/json"\n    },\n    "body": {\n        "result": true,\n        "message": "Whatever"\n    }\n}'
-        ); // eslint-disable-line
+        );
       });
     });
 
     describe('context.remainingTimeInMillis', () => {
       it('should become lower over time', () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithSuccess', 'withRemainingTime');
 
@@ -595,7 +570,7 @@ describe('AwsInvokeLocal', () => {
       });
 
       it('should start with the timeout value', () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         awsInvokeLocal.serverless.service.provider.timeout = 5;
 
         awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithSuccess', 'withRemainingTime');
@@ -605,7 +580,7 @@ describe('AwsInvokeLocal', () => {
       });
 
       it('should never become negative', () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         awsInvokeLocal.serverless.service.provider.timeout = 0.00001;
 
         awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithSuccess', 'withRemainingTime');
@@ -617,19 +592,19 @@ describe('AwsInvokeLocal', () => {
 
     describe('with extraServicePath', () => {
       it('should succeed if succeed', () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         awsInvokeLocal.options.extraServicePath = 'fixture';
 
         awsInvokeLocal.invokeLocalNodeJs('handlerWithSuccess', 'withMessageByLambdaProxy');
 
         expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain(
           '{\n    "statusCode": 200,\n    "headers": {\n        "Content-Type": "application/json"\n    },\n    "body": {\n        "result": true,\n        "message": "Whatever"\n    }\n}'
-        ); // eslint-disable-line
+        );
       });
     });
 
     it('should exit with error exit code', () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithError', 'withError');
 
@@ -637,7 +612,7 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('should log Error instance when called back', () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithError', 'withError');
       const logMessageContent = JSON.parse(stripAnsi(serverless.cli.consoleLog.lastCall.args[0]));
@@ -648,7 +623,7 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('should log Error object if handler crashes at initialization', async () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       try {
         await awsInvokeLocal.invokeLocalNodeJs(
@@ -665,7 +640,7 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('should log error when called back', () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithError', 'withMessage');
 
@@ -673,7 +648,7 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('should throw when module loading error', async () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       try {
         await awsInvokeLocal.invokeLocalNodeJs('fixture/handlerWithLoadingError', 'anyMethod');
@@ -702,13 +677,13 @@ describe('AwsInvokeLocal', () => {
 
     describe('with return', () => {
       it('should exit with error exit code', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         await awsInvokeLocal.invokeLocalNodeJs('fixture/asyncHandlerWithSuccess', 'withError');
         expect(process.exitCode).to.be.equal(1);
       });
 
       it('should succeed if succeed', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         await awsInvokeLocal.invokeLocalNodeJs('fixture/asyncHandlerWithSuccess', 'withMessage');
         expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain('"Succeed"');
@@ -717,7 +692,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('by context.done', () => {
       it('success should trigger one response', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         await awsInvokeLocal.invokeLocalNodeJs(
           'fixture/asyncHandlerWithSuccess',
@@ -731,7 +706,7 @@ describe('AwsInvokeLocal', () => {
       });
 
       it('error should trigger one response', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         await awsInvokeLocal.invokeLocalNodeJs(
           'fixture/asyncHandlerWithSuccess',
@@ -744,7 +719,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('by callback method', () => {
       it('should succeed once if succeed if by callback', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         await awsInvokeLocal.invokeLocalNodeJs(
           'fixture/asyncHandlerWithSuccess',
@@ -760,7 +735,7 @@ describe('AwsInvokeLocal', () => {
 
     describe("by callback method even if callback isn't called syncronously", () => {
       it('should succeed once if succeed if by callback', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         await awsInvokeLocal.invokeLocalNodeJs(
           'fixture/asyncHandlerWithSuccess',
@@ -776,7 +751,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('with Lambda Proxy with application/json response', () => {
       it('should succeed if succeed', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         await awsInvokeLocal.invokeLocalNodeJs(
           'fixture/asyncHandlerWithSuccess',
@@ -784,13 +759,13 @@ describe('AwsInvokeLocal', () => {
         );
         expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain(
           '{\n    "statusCode": 200,\n    "headers": {\n        "Content-Type": "application/json"\n    },\n    "body": {\n        "result": true,\n        "message": "Whatever"\n    }\n}'
-        ); // eslint-disable-line
+        );
       });
     });
 
     describe('context.remainingTimeInMillis', () => {
       it('should become lower over time', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         await awsInvokeLocal.invokeLocalNodeJs(
           'fixture/asyncHandlerWithSuccess',
@@ -801,7 +776,7 @@ describe('AwsInvokeLocal', () => {
       });
 
       it('should start with the timeout value', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         awsInvokeLocal.serverless.service.provider.timeout = 5;
 
         await awsInvokeLocal.invokeLocalNodeJs(
@@ -813,7 +788,7 @@ describe('AwsInvokeLocal', () => {
       });
 
       it('should never become negative', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         awsInvokeLocal.serverless.service.provider.timeout = 0.00001;
 
         await awsInvokeLocal.invokeLocalNodeJs(
@@ -827,7 +802,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('with extraServicePath', () => {
       it('should succeed if succeed', async () => {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         awsInvokeLocal.options.extraServicePath = 'fixture';
 
         await awsInvokeLocal.invokeLocalNodeJs(
@@ -836,19 +811,19 @@ describe('AwsInvokeLocal', () => {
         );
         expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain(
           '{\n    "statusCode": 200,\n    "headers": {\n        "Content-Type": "application/json"\n    },\n    "body": {\n        "result": true,\n        "message": "Whatever"\n    }\n}'
-        ); // eslint-disable-line
+        );
       });
     });
 
     it('should exit with error exit code', async () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       await awsInvokeLocal.invokeLocalNodeJs('fixture/asyncHandlerWithError', 'withError');
       expect(process.exitCode).to.be.equal(1);
     });
 
     it('should log Error instance when called back', async () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       await awsInvokeLocal.invokeLocalNodeJs('fixture/asyncHandlerWithError', 'withError');
       expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain('"errorMessage": "failed"');
@@ -856,14 +831,14 @@ describe('AwsInvokeLocal', () => {
     });
 
     it('should log error', async () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       await awsInvokeLocal.invokeLocalNodeJs('fixture/asyncHandlerWithError', 'withMessage');
       expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain('"errorMessage": "failed"');
     });
 
     it('should log error when error is returned', async () => {
-      awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+      awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
       await awsInvokeLocal.invokeLocalNodeJs('fixture/asyncHandlerWithError', 'returnsError');
       expect(serverless.cli.consoleLog.lastCall.args[0]).to.contain('"errorMessage": "failed"');
@@ -894,7 +869,7 @@ describe('AwsInvokeLocal', () => {
           this.skip();
         }
 
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
         process.chdir(tmpServicePath);
 
         try {
@@ -940,7 +915,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('context.remainingTimeInMillis', () => {
       it('should become lower over time', async function () {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         try {
           await awsInvokeLocal.invokeLocalRuby('ruby', 'fixture/handler', 'withRemainingTime');
@@ -959,7 +934,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('calling a class method', () => {
       it('should execute', async function () {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         try {
           await awsInvokeLocal.invokeLocalRuby(
@@ -981,7 +956,7 @@ describe('AwsInvokeLocal', () => {
 
     describe('context.deadlineMs', () => {
       it('should return deadline', async function () {
-        awsInvokeLocal.serverless.config.servicePath = tmpServicePath;
+        awsInvokeLocal.serverless.serviceDir = tmpServicePath;
 
         try {
           await awsInvokeLocal.invokeLocalRuby('ruby', 'fixture/handler', 'withDeadlineMs');
@@ -1281,15 +1256,19 @@ describe('AwsInvokeLocal', () => {
   });
 });
 
-describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
-  const testRuntime = (functionName, cliParams = []) => {
-    describe('Input resolution', () => {
+describe('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
+  const testRuntime = (functionName, options = {}) => {
+    describe.skip('Input resolution', () => {
       // All tested with individual runServerless run
       it('TODO: should accept no data', async () => {
         // Confirm outcome on { stdout }
         await runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', 'local', '--function', functionName, ...cliParams],
+          command: 'invoke local',
+          options: {
+            ...options,
+            function: functionName,
+          },
         });
 
         // Replaces
@@ -1310,15 +1289,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
         // Confirm outcome on { stdout }
         await runServerless({
           fixture: 'invocation',
-          cliArgs: [
-            'invoke',
-            'local',
-            '--function',
-            functionName,
-            ...cliParams,
-            '--data',
-            'inputData',
-          ],
+          command: 'invoke local',
+          options: {
+            ...options,
+            function: functionName,
+            data: 'inputData',
+          },
         });
 
         // Replaces
@@ -1330,15 +1306,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
           // Confirm outcome on { stdout }
           await runServerless({
             fixture: 'invocation',
-            cliArgs: [
-              'invoke',
-              'local',
-              '--function',
-              functionName,
-              ...cliParams,
-              '--data',
-              '{"inputKey":"inputValue"}',
-            ],
+            command: 'invoke local',
+            options: {
+              ...options,
+              function: functionName,
+              data: '{"inputKey":"inputValue"}',
+            },
           });
         });
 
@@ -1358,16 +1331,13 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
           // Confirm outcome on { stdout }
           await runServerless({
             fixture: 'invocation',
-            cliArgs: [
-              'invoke',
-              'local',
-              '--function',
-              functionName,
-              ...cliParams,
-              '--data',
-              '{"inputKey":"inputValue"}',
-              '--raw',
-            ],
+            command: 'invoke local',
+            options: {
+              ...options,
+              function: functionName,
+              data: '{"inputKey":"inputValue"}',
+              raw: true,
+            },
           });
         });
 
@@ -1386,15 +1356,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
           // Confirm outcome on { stdout }
           await runServerless({
             fixture: 'invocation',
-            cliArgs: [
-              'invoke',
-              'local',
-              '--function',
-              functionName,
-              ...cliParams,
-              '--path',
-              'payload.json',
-            ],
+            command: 'invoke local',
+            options: {
+              ...options,
+              function: functionName,
+              path: 'payload.json',
+            },
           });
         });
         // Single runServerless run
@@ -1408,15 +1375,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       it('TODO: should support YAML file path as data', async () => {
         await runServerless({
           fixture: 'invocation',
-          cliArgs: [
-            'invoke',
-            'local',
-            '--function',
-            functionName,
-            ...cliParams,
-            '--path',
-            'payload.yaml',
-          ],
+          command: 'invoke local',
+          options: {
+            ...options,
+            function: functionName,
+            path: 'payload.yaml',
+          },
         });
 
         // Replaces
@@ -1426,15 +1390,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       it('TODO: should support JS file path for data', async () => {
         await runServerless({
           fixture: 'invocation',
-          cliArgs: [
-            'invoke',
-            'local',
-            '--function',
-            functionName,
-            ...cliParams,
-            '--path',
-            'payload.js',
-          ],
+          command: 'invoke local',
+          options: {
+            ...options,
+            function: functionName,
+            path: 'payload.js',
+          },
         });
 
         // Replaces
@@ -1444,14 +1405,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       it('TODO: should support absolute file path as data', async () => {
         await runServerless({
           fixture: 'invocation',
-          cliArgs: [
-            'invoke',
-            'local',
-            '--function',
-            functionName,
-            ...cliParams,
-            '--path' /* TODO: Pass absolute path to payload.json in fixture */,
-          ],
+          command: 'invoke local',
+          options: {
+            ...options,
+            function: functionName,
+            path: '' /* TODO: Pass absolute path to payload.json in fixture */,
+          },
         });
         // Replaces
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L213-L227
@@ -1461,7 +1420,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
         await expect(
           runServerless({
             fixture: 'invocation',
-            cliArgs: ['invoke', '--function', 'callback', '--path', 'not-existing.yaml'],
+            command: 'invoke local',
+            options: {
+              ...options,
+              function: functionName,
+              path: 'not-existing.yaml',
+            },
           })
         ).to.eventually.be.rejected.and.have.property('code', 'TODO');
         // Replaces
@@ -1472,7 +1436,11 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
         await expect(
           runServerless({
             fixture: 'invocation',
-            cliArgs: ['invoke', '--function', 'notExisting'],
+            command: 'invoke local',
+            options: {
+              ...options,
+              function: 'notExisting',
+            },
           })
         ).to.eventually.be.rejected.and.have.property('code', 'TODO');
         // Replaces
@@ -1481,28 +1449,26 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
     });
 
     describe('Environment variables', () => {
+      let responseBody;
       before(async () => {
         process.env.AWS_ACCESS_KEY_ID = 'AAKIXXX';
         process.env.AWS_SECRET_ACCESS_KEY = 'ASAKXXX';
 
         // Confirm outcome on { stdout }
-        await runServerless({
+        const response = await runServerless({
           fixture: 'invocation',
-          cliArgs: [
-            'invoke',
-            'local',
-            '--function',
-            functionName,
-            ...cliParams,
-            '--env',
-            'PARAM_ENV_VAR=param-env-var-value',
-          ],
+          command: 'invoke local',
+          options: {
+            ...options,
+            function: functionName,
+            env: 'PARAM_ENV_VAR=-Dblart=snort',
+          },
           configExt: {
             provider: {
               environment: {
                 PROVIDER_LEVEL_VAR: 'PROVIDER_LEVEL_VAR_VALUE',
+                NULL_VAR: null,
               },
-              profile: 'production',
               region: 'us-east-2',
             },
             functions: {
@@ -1514,6 +1480,8 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
             },
           },
         });
+        const stdoutAsJson = JSON.parse(response.stdoutData);
+        responseBody = JSON.parse(stdoutAsJson.body);
       });
 
       after(() => {
@@ -1521,37 +1489,39 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
         delete process.env.AWS_SECRET_ACCESS_KEY;
       });
 
-      it('TODO: should expose eventual AWS credentials in environment variables', () => {
+      xit('TODO: should expose eventual AWS credentials in environment variables', () => {
         // Replaces
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L284-L327
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L390-L402
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L404-L415
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L417-L424
       });
-      it('TODO: should expose `provider.env` in environment variables', () => {
+      xit('TODO: should expose `provider.env` in environment variables', () => {
         // Replaces
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L354-L357
       });
-      it('TODO: should expose `provider.profile` in environment variables', () => {
+      xit('TODO: should expose `provider.profile` in environment variables', () => {
         // Replaces
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L359-L363
       });
-      it('TODO: should expose `functions[].env` in environment variables', () => {
+      xit('TODO: should expose `functions[].env` in environment variables', () => {
         // Replaces
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L365-L368
       });
-      it('TODO: should expose `--env` vars in environment variables', () => {
-        // Replaces
-        // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L1259-L1299
-      });
-      it('TODO: should expose default lambda environment variables', () => {
+      it('should expose `--env` vars in environment variables', async () =>
+        expect(responseBody.env.PARAM_ENV_VAR).to.equal('-Dblart=snort'));
+
+      xit('TODO: should expose default lambda environment variables', () => {
         // Replaces
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L370-L388
       });
-      it('TODO: should resolve region from `service.provider` if not provided via option', () => {
+      xit('TODO: should resolve region from `service.provider` if not provided via option', () => {
         // Replaces
         // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L426-L441
       });
+
+      it('should not expose null environment variables', async () =>
+        expect(responseBody.env).to.not.have.property('NULL_VAR'));
     });
   };
 
@@ -1559,11 +1529,12 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
     testRuntime('callback');
 
     // All tested with individual runServerless run
-    it('TODO: should support success resolution via async function', async () => {
+    xit('TODO: should support success resolution via async function', async () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'async'],
+        command: 'invoke local',
+        options: { function: 'async' },
       });
 
       // Replaces
@@ -1572,29 +1543,32 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L881-L892
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L917-L922
     });
-    it('TODO: should support success resolution via context.done', async () => {
+    xit('TODO: should support success resolution via context.done', async () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'contextDone'],
+        command: 'invoke local',
+        options: { function: 'contextDone' },
       });
 
       // Replaces
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L609-L625
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L771-L783
     });
-    it('TODO: should support success resolution via context.succeed', async () => {
+    xit('TODO: should support success resolution via context.succeed', async () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'contextSucceed'],
+        command: 'invoke local',
+        options: { function: 'contextSucceed' },
       });
     });
-    it('TODO: should support immediate failure at initialization', async () => {
+    xit('TODO: should support immediate failure at initialization', async () => {
       await expect(
         runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', '--function', 'initFail'],
+          command: 'invoke local',
+          options: { function: 'initFail' },
         })
       ).to.eventually.be.rejected.and.have.property('code', 'TODO');
 
@@ -1602,19 +1576,21 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L702-L717
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L727-L737
     });
-    it('TODO: should support immediate failure at invocation', async () => {
+    xit('TODO: should support immediate failure at invocation', async () => {
       await expect(
         runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', '--function', 'invocationFail'],
+          command: 'invoke local',
+          options: { function: 'invocationFail' },
         })
       ).to.eventually.be.rejected.and.have.property('code', 'TODO');
     });
-    it('TODO: should support failure resolution via async function', async () => {
+    xit('TODO: should support failure resolution via async function', async () => {
       await expect(
         runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', '--function', 'async', '--data', '{"shouldFail":true}'],
+          command: 'invoke local',
+          options: { function: 'async', data: '{"shouldFail":true}' },
         })
       ).to.eventually.be.rejected.and.have.property('code', 'TODO');
 
@@ -1624,57 +1600,63 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L756-L760
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L895-L915
     });
-    it('TODO: should support failure resolution via callback', async () => {
+    xit('TODO: should support failure resolution via callback', async () => {
       await expect(
         runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', '--function', 'callback', '--data', '{"shouldFail":true}'],
+          command: 'invoke local',
+          options: { function: 'callback', data: '{"shouldFail":true}' },
         })
       ).to.eventually.be.rejected.and.have.property('code', 'TODO');
 
       // Replaces
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L691-L700
     });
-    it('TODO: should support failure resolution via context.done', async () => {
+    xit('TODO: should support failure resolution via context.done', async () => {
       await expect(
         runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', '--function', 'contextDone', '--data', '{"shouldFail":true}'],
+          command: 'invoke local',
+          options: { function: 'contextDone', data: '{"shouldFail":true}' },
         })
       ).to.eventually.be.rejected.and.have.property('code', 'TODO');
 
       // Replaces
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L785-L794
     });
-    it('TODO: should support failure resolution via context.fail', async () => {
+    xit('TODO: should support failure resolution via context.fail', async () => {
       await expect(
         runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', '--function', 'contextSucceed', '--data', '{"shouldFail":true}'],
+          command: 'invoke local',
+          options: { function: 'contextSucceed', data: '{"shouldFail":true}' },
         })
       ).to.eventually.be.rejected.and.have.property('code', 'TODO');
     });
-    it('TODO: should recognize first resolution', async () => {
+    xit('TODO: should recognize first resolution', async () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'doubledResolutionCallbackFirst'],
+        command: 'invoke local',
+        options: { function: 'doubledResolutionCallbackFirst' },
       });
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'doubledResolutionPromiseFirst'],
+        command: 'invoke local',
+        options: { function: 'doubledResolutionPromiseFirst' },
       });
 
       // Replaces
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L798-L810
       // https://github.com/serverless/serverless/blob/95c0bc09421b869ae1d8fc5dea42a2fce1c2023e/test/unit/lib/plugins/aws/invokeLocal/index.test.js#L814-L826
     });
-    it('TODO: should support context.remainingTimeInMillis()', async () => {
+    xit('TODO: should support context.remainingTimeInMillis()', async () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'remainingTime'],
+        command: 'invoke local',
+        options: { function: 'remainingTime' },
       });
 
       // Replaces
@@ -1683,7 +1665,7 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
     });
   });
 
-  describe('Python', () => {
+  describe.skip('Python', () => {
     // If Python runtime is not installed, skip below tests by:
     // - Invoke skip with notice as here;
     // https://github.com/serverless/serverless/blob/2d6824cde531ba56758f441b39b5ab018702e866/lib/plugins/aws/invokeLocal/index.test.js#L1001-L1003
@@ -1694,7 +1676,8 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
         // Confirm outcome on { stdout }
         await runServerless({
           fixture: 'invocation',
-          cliArgs: ['invoke', '--function', 'pythonRemainingTime'], // TODO: Configure python handler
+          command: 'invoke local',
+          options: { function: 'pythonRemainingTime' }, // TODO: Configure python handler
         });
 
         // Replaces
@@ -1703,7 +1686,7 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
     });
   });
 
-  describe('Ruby', () => {
+  describe.skip('Ruby', () => {
     // If Ruby runtime is not installed, skip below tests by:
     // - Invoke skip with notice as here;
     // https://github.com/serverless/serverless/blob/2d6824cde531ba56758f441b39b5ab018702e866/lib/plugins/aws/invokeLocal/index.test.js#L1043-L1045
@@ -1713,7 +1696,8 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'rubyClass'], // TODO: Configure ruby handler
+        command: 'invoke local',
+        options: { function: 'rubyClass' }, // TODO: Configure ruby handler
       });
 
       // Replaces
@@ -1724,7 +1708,8 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'rubyRemainingTime'], // TODO: Configure ruby handler
+        command: 'invoke local',
+        options: { function: 'rubyRemainingTime' }, // TODO: Configure ruby handler
       });
 
       // Replaces
@@ -1734,7 +1719,8 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
       // Confirm outcome on { stdout }
       await runServerless({
         fixture: 'invocation',
-        cliArgs: ['invoke', '--function', 'rubyDeadline'], // TODO: Configure ruby handler
+        command: 'invoke local',
+        options: { function: 'rubyDeadline' }, // TODO: Configure ruby handler
       });
 
       // Replaces
@@ -1742,7 +1728,7 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
     });
   });
 
-  describe('Java', () => {
+  describe.skip('Java', () => {
     // If Java runtime is not installed, skip below tests by:
     // - Invoke skip with notice as here;
     // https://github.com/serverless/serverless/blob/2d6824cde531ba56758f441b39b5ab018702e866/lib/plugins/aws/invokeLocal/index.test.js#L1043-L1045
@@ -1750,7 +1736,7 @@ describe.skip('test/unit/lib/plugins/aws/invokeLocal/index.test.js', () => {
     testRuntime('java'); // TODO: Configure java handler
   });
 
-  describe('Docker', () => {
+  describe.skip('Docker', () => {
     // If Docker is not installed, skip below tests by:
     // - Invoke skip with notice as here;
     // https://github.com/serverless/serverless/blob/2d6824cde531ba56758f441b39b5ab018702e866/lib/plugins/aws/invokeLocal/index.test.js#L1043-L1045

@@ -10,7 +10,7 @@ const AwsProvider = require('../../../../../../../lib/plugins/aws/provider');
 const AwsCompileFunctions = require('../../../../../../../lib/plugins/aws/package/compile/functions');
 const Serverless = require('../../../../../../../lib/Serverless');
 const runServerless = require('../../../../../../utils/run-serverless');
-const fixtures = require('../../../../../../fixtures');
+const fixtures = require('../../../../../../fixtures/programmatic');
 const getHashForFilePath = require('../../../../../../../lib/plugins/aws/package/lib/getHashForFilePath');
 
 const { getTmpDirPath, createTmpFile } = require('../../../../../../utils/fs');
@@ -229,6 +229,23 @@ describe('AwsCompileFunctions', () => {
           awsCompileFunctions.serverless.service.provider.compiledCloudFormationTemplate.Resources
             .FuncLambdaFunction.Properties.Role
         ).to.deep.equal(awsCompileFunctions.serverless.service.functions.func.role);
+      });
+    });
+
+    it('should honour provider.iam.role option when set', async () => {
+      const { cfTemplate } = await runServerless({
+        fixture: 'function',
+        configExt: {
+          provider: {
+            role: 'role-a',
+            iam: { role: 'role-b' },
+          },
+        },
+        command: 'package',
+      });
+
+      expect(cfTemplate.Resources.FooLambdaFunction.Properties.Role).to.eql({
+        'Fn::GetAtt': ['role-b', 'Arn'],
       });
     });
 
@@ -1450,7 +1467,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
     before(async () => {
       const { awsNaming, cfTemplate, fixtureData } = await runServerless({
         fixture: 'packageArtifact',
-        cliArgs: ['package'],
+        command: 'package',
         configExt: {
           service: {
             // TODO: When removing support for service.awsKmsKeyArn, whole service object
@@ -1464,8 +1481,10 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
               securityGroupIds: ['sg-0a0a0a0a'],
             },
             tags: {
-              providerTagA: 'providerTagAValue',
-              providerTagB: 'providerTagBValue',
+              'providerTagA': 'providerTagAValue',
+              'providerTagB': 'providerTagBValue',
+              'provider:tagC': 'providerTagCValue',
+              'provider:tag-D': 'providerTagDValue',
             },
             tracing: {
               lambda: 'Active',
@@ -1718,6 +1737,32 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       });
     });
 
+    it('should support `vpc` defined with `Fn::Split`', async () => {
+      const { awsNaming, cfTemplate, fixtureData } = await runServerless({
+        fixture: 'function',
+        command: 'package',
+        configExt: {
+          provider: {
+            vpc: {
+              subnetIds: {
+                'Fn::Split': [',', 'subnet-01010101,subnet-21212121'],
+              },
+              securityGroupIds: {
+                'Fn::Split': [',', 'sg-0a0a0a0a,sg-0b0b0b0b'],
+              },
+            },
+          },
+        },
+      });
+
+      const providerConfig = fixtureData.serviceConfig.provider;
+
+      const { VpcConfig } = cfTemplate.Resources[awsNaming.getLambdaLogicalId('foo')].Properties;
+
+      expect(VpcConfig.SecurityGroupIds).to.deep.equal(providerConfig.vpc.securityGroupIds);
+      expect(VpcConfig.SubnetIds).to.deep.equal(providerConfig.vpc.subnetIds);
+    });
+
     describe('when custom IAM role is used', () => {
       let customRoleServiceConfig;
       let fooFunctionRole;
@@ -1726,10 +1771,12 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       before(async () => {
         const { awsNaming, cfTemplate, fixtureData } = await runServerless({
           fixture: 'function',
-          cliArgs: ['package'],
+          command: 'package',
           configExt: {
             provider: {
-              role: 'arn:aws:iam::123456789012:role/fromProvider',
+              iam: {
+                role: 'arn:aws:iam::123456789012:role/fromProvider',
+              },
             },
             functions: {
               foo: {
@@ -1744,16 +1791,36 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
         customRoleServiceConfig = fixtureData.serviceConfig;
       });
 
-      it('should support `provider.role` as arn string', async () => {
+      it('should support `provider.iam.role` as arn string', async () => {
         const providerConfig = customRoleServiceConfig.provider;
 
-        expect(otherFunctionRole).to.equal(providerConfig.role);
+        expect(otherFunctionRole).to.equal(providerConfig.iam.role);
       });
 
-      it('should prefer `functions[].role` over `provider.role`', () => {
+      it('should prefer `functions[].role` over `provider.iam.role`', () => {
         const fooFunctionConfig = customRoleServiceConfig.functions.foo;
 
         expect(fooFunctionRole).to.equal(fooFunctionConfig.role);
+      });
+
+      it('should support `provider.iam.role` defined as CF function', async () => {
+        const { awsNaming, cfTemplate, fixtureData } = await runServerless({
+          fixture: 'function',
+          command: 'package',
+          configExt: {
+            provider: {
+              iam: {
+                role: {
+                  'Fn::Sub': 'arn:aws:iam::${AWS::AccountId}:role/fromFunction',
+                },
+              },
+            },
+          },
+        });
+
+        const functionRole =
+          cfTemplate.Resources[awsNaming.getLambdaLogicalId('foo')].Properties.Role;
+        expect(functionRole).to.deep.equal(fixtureData.serviceConfig.provider.iam.role);
       });
     });
   });
@@ -1763,7 +1830,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
     // https://github.com/serverless/serverless/blob/d8527d8b57e7e5f0b94ba704d9f53adb34298d99/lib/plugins/aws/package/compile/functions/index.test.js#L2222-L2286
 
     it('should support resource name', async () => {
-      await runServerless({ fixture: 'function', configExt: {} });
+      await runServerless({ fixture: 'function', configExt: {}, command: 'package' });
       // Replacement for
       // https://github.com/serverless/serverless/blob/d8527d8b57e7e5f0b94ba704d9f53adb34298d99/lib/plugins/aws/package/compile/functions/index.test.js#L235-L257
       //
@@ -1772,7 +1839,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
     });
 
     it('should support Fn::GetAtt function', async () => {
-      await runServerless({ fixture: 'function', configExt: {} });
+      await runServerless({ fixture: 'function', configExt: {}, command: 'package' });
       // Replacement for
       // https://github.com/serverless/serverless/blob/d8527d8b57e7e5f0b94ba704d9f53adb34298d99/lib/plugins/aws/package/compile/functions/index.test.js#L259-L281
       //
@@ -1783,7 +1850,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
 
   describe('`provider.lambdaHashingVersion` support', () => {
     it('CodeSha256 for functions should be the same for default hashing and for 20201221 version', async () => {
-      const { servicePath, updateConfig } = await fixtures.setup('function', {
+      const { servicePath: serviceDir, updateConfig } = await fixtures.setup('function', {
         configExt: {
           provider: {
             versionFunctions: true,
@@ -1792,8 +1859,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       });
 
       const { cfTemplate: originalTemplate, awsNaming } = await runServerless({
-        cwd: servicePath,
-        cliArgs: ['package'],
+        cwd: serviceDir,
+        command: 'package',
       });
 
       const functionCfLogicalId = awsNaming.getLambdaLogicalId('foo');
@@ -1810,8 +1877,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
         },
       });
       const { cfTemplate: updatedTemplate } = await runServerless({
-        cwd: servicePath,
-        cliArgs: ['package'],
+        cwd: serviceDir,
+        command: 'package',
       });
       const updatedVersionCfConfig = Object.values(updatedTemplate.Resources).find(
         (resource) =>
@@ -1829,13 +1896,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
     let serverless;
     let serviceConfig;
     let iamRolePolicyStatements;
-    const imageDigestFromECR =
-      'sha256:2e6b10a4b1ca0f6d3563a8a1f034dde7c4d7c93b50aa91f24311765d0822186b';
-    const awsRequestStubMap = {
-      ECR: {
-        describeImages: { imageDetails: [{ imageDigest: imageDigestFromECR }] },
-      },
-    };
+    const imageSha = '6bb600b4d6e1d7cf521097177dd0c4e9ea373edb91984a505333be8ac9455d38';
+    const imageWithSha = `000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker@sha256:${imageSha}`;
 
     before(async () => {
       const {
@@ -1845,7 +1907,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
         fixtureData,
       } = await runServerless({
         fixture: 'functionDestinations',
-        cliArgs: ['package'],
+        command: 'package',
         configExt: {
           functions: {
             fnTargetFailure: {
@@ -1875,15 +1937,18 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
               },
             },
             fnImage: {
-              image:
-                '000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker@sha256:6bb600b4d6e1d7cf521097177dd0c4e9ea373edb91984a505333be8ac9455d38',
+              image: imageWithSha,
             },
-            fnImageWithTag: {
-              image: '000000000000.dkr.ecr.sa-east-1.amazonaws.com/test-lambda-docker:stable',
+            fnImageWithConfig: {
+              image: {
+                uri: imageWithSha,
+                workingDirectory: './workdir',
+                entryPoint: ['executable', 'param1'],
+                command: ['anotherexecutable'],
+              },
             },
           },
         },
-        awsRequestStubMap,
       });
       cfResources = cfTemplate.Resources;
       naming = awsNaming;
@@ -2065,6 +2130,23 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       // https://github.com/serverless/serverless/blob/d8527d8b57e7e5f0b94ba704d9f53adb34298d99/lib/plugins/aws/package/compile/functions/index.test.js#L2325-L2362
     });
 
+    it('should throw an error when nonexistent layer is referenced', async () => {
+      await expect(
+        runServerless({
+          fixture: 'functionDestinations',
+          command: 'package',
+          configExt: {
+            functions: {
+              fnInvalidLayer: {
+                handler: 'target.handler',
+                layers: [{ Ref: 'NonexistentLambdaLayer' }],
+              },
+            },
+          },
+        })
+      ).to.be.eventually.rejected.and.have.property('code', 'LAMBDA_LAYER_REFERENCE_NOT_FOUND');
+    });
+
     it.skip('TODO: should support `functions[].conditions`', () => {
       // Replacement for
       // https://github.com/serverless/serverless/blob/d8527d8b57e7e5f0b94ba704d9f53adb34298d99/lib/plugins/aws/package/compile/functions/index.test.js#L2364-L2379
@@ -2182,6 +2264,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       });
     });
 
+    // This is just a happy-path test of images support. Due to sharing code from `provider.js`
+    // all further configurations are tested as a part of `test/unit/lib/plugins/aws/provider.test.js`
     it('should support `functions[].image` with sha', () => {
       const functionServiceConfig = serviceConfig.functions.fnImage;
       const functionCfLogicalId = naming.getLambdaLogicalId('fnImage');
@@ -2204,23 +2288,15 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       expect(versionCfConfig.CodeSha256).to.equal(imageDigestSha);
     });
 
-    it('should support `functions[].image` with tag', () => {
-      const functionServiceConfig = serviceConfig.functions.fnImageWithTag;
-      const functionCfLogicalId = naming.getLambdaLogicalId('fnImageWithTag');
+    it('should support `functions[].image` with image config properties', () => {
+      const functionCfLogicalId = naming.getLambdaLogicalId('fnImageWithConfig');
       const functionCfConfig = cfResources[functionCfLogicalId].Properties;
 
-      expect(functionCfConfig.Code).to.deep.equal({
-        ImageUri: `${functionServiceConfig.image.split(':')[0]}@${imageDigestFromECR}`,
+      expect(functionCfConfig.ImageConfig).to.deep.equal({
+        Command: ['anotherexecutable'],
+        EntryPoint: ['executable', 'param1'],
+        WorkingDirectory: './workdir',
       });
-      expect(functionCfConfig).to.not.have.property('Handler');
-      expect(functionCfConfig).to.not.have.property('Runtime');
-
-      const versionCfConfig = Object.values(cfResources).find(
-        (resource) =>
-          resource.Type === 'AWS::Lambda::Version' &&
-          resource.Properties.FunctionName.Ref === functionCfLogicalId
-      ).Properties;
-      expect(versionCfConfig.CodeSha256).to.equal(imageDigestFromECR.slice('sha256:'.length));
     });
   });
 
@@ -2239,7 +2315,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
             },
           },
         },
-        cliArgs: ['package'],
+        command: 'package',
       }).catch((error) => {
         expect(error).to.have.property('code', 'LAMBDA_FILE_SYSTEM_CONFIG_MISSING_VPC');
       });
@@ -2258,11 +2334,13 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       });
 
       it('should not create a different version if only function-wide configuration changed', async () => {
-        const { servicePath, updateConfig } = await fixtures.setup('function', { configExt });
+        const { servicePath: serviceDir, updateConfig } = await fixtures.setup('function', {
+          configExt,
+        });
 
         const { cfTemplate: originalTemplate } = await runServerless({
-          cwd: servicePath,
-          cliArgs: ['package'],
+          cwd: serviceDir,
+          command: 'package',
         });
         const originalVersionArn = originalTemplate.Outputs.FooLambdaFunctionQualifiedArn.Value.Ref;
 
@@ -2277,8 +2355,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           },
         });
         const { cfTemplate: updatedTemplate } = await runServerless({
-          cwd: servicePath,
-          cliArgs: ['package'],
+          cwd: serviceDir,
+          command: 'package',
         });
         const updatedVersionArn = updatedTemplate.Outputs.FooLambdaFunctionQualifiedArn.Value.Ref;
 
@@ -2291,7 +2369,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
 
       describe('with layers', () => {
         let firstCfTemplate;
-        let servicePath;
+        let serviceDir;
         let updateConfig;
         const mockDescribeStackResponse = {
           CloudFormation: {
@@ -2301,10 +2379,10 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
 
         beforeEach(async () => {
           const serviceData = await fixtures.setup('functionLayers', { configExt });
-          ({ servicePath, updateConfig } = serviceData);
+          ({ servicePath: serviceDir, updateConfig } = serviceData);
           const data = await runServerless({
-            cwd: servicePath,
-            cliArgs: ['package'],
+            cwd: serviceDir,
+            command: 'package',
             awsRequestStubMap: mockDescribeStackResponse,
           });
           firstCfTemplate = data.cfTemplate;
@@ -2325,8 +2403,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           });
 
           const data = await runServerless({
-            cwd: servicePath,
-            cliArgs: ['package'],
+            cwd: serviceDir,
+            command: 'package',
             awsRequestStubMap: mockDescribeStackResponse,
           });
 
@@ -2344,8 +2422,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
             firstCfTemplate.Resources.TestLayerLambdaLayer.Properties.Content.S3Key;
 
           const data = await runServerless({
-            cwd: servicePath,
-            cliArgs: ['package'],
+            cwd: serviceDir,
+            command: 'package',
             awsRequestStubMap: mockDescribeStackResponse,
           });
 
@@ -2368,8 +2446,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           });
 
           const data = await runServerless({
-            cwd: servicePath,
-            cliArgs: ['package'],
+            cwd: serviceDir,
+            command: 'package',
             awsRequestStubMap: mockDescribeStackResponse,
           });
 
@@ -2389,8 +2467,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           });
 
           const data = await runServerless({
-            cwd: servicePath,
-            cliArgs: ['package'],
+            cwd: serviceDir,
+            command: 'package',
             awsRequestStubMap: mockDescribeStackResponse,
           });
 
@@ -2404,8 +2482,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
             firstCfTemplate.Outputs.LayerFuncLambdaFunctionQualifiedArn.Value.Ref;
 
           const data = await runServerless({
-            cwd: servicePath,
-            cliArgs: ['package'],
+            cwd: serviceDir,
+            command: 'package',
             awsRequestStubMap: mockDescribeStackResponse,
           });
 
@@ -2428,8 +2506,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           });
 
           const data = await runServerless({
-            cwd: servicePath,
-            cliArgs: ['package'],
+            cwd: serviceDir,
+            command: 'package',
             awsRequestStubMap: mockDescribeStackResponse,
           });
 
@@ -2444,9 +2522,9 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
           let backupLayer;
 
           beforeEach(async () => {
-            originalLayer = path.join(servicePath, 'testLayer');
-            sourceChangeLayer = path.join(servicePath, 'extra_layers', 'testLayerSourceChange');
-            backupLayer = path.join(servicePath, 'extra_layers', 'testLayerBackup');
+            originalLayer = path.join(serviceDir, 'testLayer');
+            sourceChangeLayer = path.join(serviceDir, 'extra_layers', 'testLayerSourceChange');
+            backupLayer = path.join(serviceDir, 'extra_layers', 'testLayerBackup');
 
             await fse.rename(originalLayer, backupLayer);
             await fse.rename(sourceChangeLayer, originalLayer);
@@ -2463,8 +2541,8 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
               firstCfTemplate.Outputs.LayerFuncLambdaFunctionQualifiedArn.Value.Ref;
 
             const data = await runServerless({
-              cwd: servicePath,
-              cliArgs: ['package'],
+              cwd: serviceDir,
+              command: 'package',
               awsRequestStubMap: mockDescribeStackResponse,
             });
 
@@ -2488,7 +2566,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
     before(async () => {
       await runServerless({
         fixture: 'packageArtifact',
-        cliArgs: ['deploy'],
+        command: 'deploy',
         configExt: {
           package: { artifact: 'some s3 url' },
           functions: { foo: { package: { individually: true, artifact: 'other s3 url' } } },
@@ -2508,7 +2586,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       //    On which we would confirm that
       //    - It's generated string that's being send
       //    - Corresponding url is configured in CF template
-      // Test with ["deploy"] cliArgs, and configure `lastLifecycleHookName` to 'aws:deploy:deploy:uploadArtifact'
+      // Test with "deploy" command, and configure `lastLifecycleHookName` to 'aws:deploy:deploy:uploadArtifact'
       // It'll demand stubbing few other AWS calls for that follow this stub:
       // https://github.com/serverless/enterprise-plugin/blob/cdd53df45dfad18d8bdd79969194a61cb8178671/lib/deployment/parse.test.js#L1585-L1627
       // Confirm same artifact is used for all functions

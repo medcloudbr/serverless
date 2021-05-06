@@ -805,8 +805,53 @@ functions:
           path: posts/create
           method: post
           request:
-            schema:
+            schemas:
               application/json: ${file(create_request.json)}
+```
+
+In addition, you can also customize created model with `name` and `description` properties.
+
+```yml
+functions:
+  create:
+    handler: posts.create
+    events:
+      - http:
+          path: posts/create
+          method: post
+          request:
+            schemas:
+              application/json:
+                schema: ${file(create_request.json)}
+                name: PostCreateModel
+                description: 'Validation model for Creating Posts'
+```
+
+To reuse the same model across different events, you can define global models on provider level.
+In order to define global model you need to add its configuration to `provider.apiGateway.request.schemas`.
+After defining a global model, you can use it in the event by referencing it by the key. Provider models are created for `application/json` content type.
+
+```yml
+provider:
+    ...
+    apiGateway:
+      request:
+        schemas:
+          post-create-model:
+            name: PostCreateModel
+            schema: ${file(api_schema/post_add_schema.json)}
+            description: "A Model validation for adding posts"
+
+functions:
+  create:
+    handler: posts.create
+    events:
+      - http:
+          path: posts/create
+          method: post
+          request:
+            schemas:
+              application/json: post-create-model
 ```
 
 A sample schema contained in `create_request.json` might look something like this:
@@ -1669,6 +1714,8 @@ provider:
     apiGateway: true
 ```
 
+**Note:** If external API Gateway resource is used and imported via `provider.apiGateway.restApiId` setting, `provider.tracing.apiGateway` setting will be ignored.
+
 ## Tags / Stack Tags
 
 API Gateway stages will be tagged with the `tags` and `stackTags` values defined at the `provider` level:
@@ -1698,6 +1745,8 @@ provider:
 
 The log streams will be generated in a dedicated log group which follows the naming schema `/aws/api-gateway/{service}-{stage}`.
 
+**Note:** If external API Gateway resource is used and imported via `provider.apiGateway.restApiId` setting, `provider.logs.restApi` setting will be ignored.
+
 To be able to write logs, API Gateway [needs a CloudWatch role configured](https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-logging.html). This setting is per region, shared by all the APIs. There are three approaches for handling it:
 
 - Let Serverless create and assign an IAM role for you (default behavior). Note that since this is a shared setting, this role is not removed when you remove the deployment.
@@ -1720,7 +1769,7 @@ To be able to write logs, API Gateway [needs a CloudWatch role configured](https
         roleManagedExternally: true # disables automatic role creation/checks done by Serverless
   ```
 
-**Note:** Serverless configures the API Gateway CloudWatch role setting using a custom resource lambda function. If you're using `cfnRole` to specify a limited-access IAM role for your serverless deployment, the custom resource lambda will assume this role during execution.
+**Note:** Serverless configures the API Gateway CloudWatch role setting using a custom resource lambda function. If you're using `iam.deploymentRole` to specify a limited-access IAM role for your serverless deployment, the custom resource lambda will assume this role during execution.
 
 By default, API Gateway access logs will use the following format:
 
@@ -1752,7 +1801,7 @@ provider:
 
 Valid values are INFO, ERROR.
 
-If you want to disable access logging completly you can do with the following:
+The existence of the `logs` property enables both access and execution logging. If you want to disable one or both of them, you can do so with the following:
 
 ```yml
 # serverless.yml
@@ -1760,7 +1809,8 @@ provider:
   name: aws
   logs:
     restApi:
-      accessLogging: true
+      accessLogging: false
+      executionLogging: false
 ```
 
 By default, the full requests and responses data will be logged. If you want to disable like so:
@@ -1781,7 +1831,17 @@ Websockets have the same configuration options as the the REST API. Example:
 provider:
   name: aws
   logs:
-    websoocket:
+    websocket:
       level: INFO
       fullExecutionData: false
+```
+
+## Disable Default Endpoint
+
+By default, clients can invoke your API with the default https://{api_id}.execute-api.{region}.amazonaws.com endpoint. To require that clients use a custom domain name to invoke your API, disable the default endpoint.
+
+```yml
+provider:
+  apiGateway:
+    disableDefaultEndpoint: true
 ```

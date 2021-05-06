@@ -1,0 +1,16 @@
+service: service
+
+configValidationMode: error
+frameworkVersion: '*'
+
+provider:
+  name: aws
+  lambdaHashingVersion: 20201221
+
+functions:
+  target:
+    handler: target.handler
+  trigger:
+    handler: trigger.handler
+    destinations:
+      onSuccess: target

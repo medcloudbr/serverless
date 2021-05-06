@@ -1,31 +1,29 @@
 'use strict';
 
 const runServerless = require('../../../../../../../../utils/run-serverless');
-const { ServerlessError } = require('../../../../../../../../../lib/classes/Error');
+const ServerlessError = require('../../../../../../../../../lib/serverless-error');
 const { use: chaiUse, expect } = require('chai');
 const chaiAsPromised = require('chai-as-promised');
 
 chaiUse(chaiAsPromised);
 
-describe('lib/plugins/aws/package/compile/eents/alb/index.test.js', () => {
+describe('test/unit/lib/plugins/aws/package/compile/events/alb/index.test.js', () => {
   let cfResources;
   let naming;
 
+  const albId = '50dc6c495c0c9188';
   const baseEventConfig = {
-    listenerArn:
-      'arn:aws:elasticloadbalancing:' +
-      'us-east-1:123456789012:listener/app/my-load-balancer/' +
-      '50dc6c495c0c9188/f2f7dc8efc522ab2',
+    listenerArn: `arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/my-load-balancer/${albId}/f2f7dc8efc522ab2`,
+  };
+
+  const validBaseEventConfig = {
+    ...baseEventConfig,
+    conditions: {
+      path: '/',
+    },
   };
 
   before(async () => {
-    const validBaseEventConfig = {
-      ...baseEventConfig,
-      conditions: {
-        path: '/',
-      },
-    };
-
     const baseAuthorizerConfig = {
       type: 'cognito',
       userPoolClientId: 'userPoolClientId',
@@ -37,7 +35,7 @@ describe('lib/plugins/aws/package/compile/eents/alb/index.test.js', () => {
 
     const { awsNaming, cfTemplate } = await runServerless({
       fixture: 'function',
-      cliArgs: ['package'],
+      command: 'package',
       configExt: {
         provider: {
           alb: {
@@ -70,6 +68,30 @@ describe('lib/plugins/aws/package/compile/eents/alb/index.test.js', () => {
           fnConditionsPathOnly: {
             handler: 'index.handler',
             events: [{ alb: { ...baseEventConfig, priority: 5, conditions: { path: '/' } } }],
+          },
+          fnConditionsMultipleHostsOnly: {
+            handler: 'index.handler',
+            events: [
+              {
+                alb: {
+                  ...baseEventConfig,
+                  priority: 6,
+                  conditions: { host: ['example1.com', 'example2.com'] },
+                },
+              },
+            ],
+          },
+          fnAlbTargetGroupName: {
+            handler: 'index.handler',
+            events: [
+              {
+                alb: {
+                  ...validBaseEventConfig,
+                  priority: 7,
+                  targetGroupName: 'custom-targetgroup-name',
+                },
+              },
+            ],
           },
         },
       },
@@ -146,8 +168,8 @@ describe('lib/plugins/aws/package/compile/eents/alb/index.test.js', () => {
       expect(rule.Type).to.equal('AWS::ElasticLoadBalancingV2::ListenerRule');
       expect(rule.Properties.Conditions).to.have.length(1);
       expect(rule.Properties.Conditions[0].Field).to.equal('host-header');
-      expect(rule.Properties.Conditions[0].Values).to.have.length(1);
-      expect(rule.Properties.Conditions[0].Values[0]).to.equal('example.com');
+      expect(rule.Properties.Conditions[0].HostHeaderConfig.Values).to.have.length(1);
+      expect(rule.Properties.Conditions[0].HostHeaderConfig.Values[0]).to.equal('example.com');
     });
 
     it('should should support rule with path', () => {
@@ -164,11 +186,26 @@ describe('lib/plugins/aws/package/compile/eents/alb/index.test.js', () => {
       expect(rule.Properties.Conditions[0].Values[0]).to.equal('/');
     });
 
+    it('should support multiple host rules', () => {
+      const albListenerRuleLogicalId = naming.getAlbListenerRuleLogicalId(
+        'fnConditionsMultipleHostsOnly',
+        6
+      );
+      const rule = cfResources[albListenerRuleLogicalId];
+
+      expect(rule.Type).to.equal('AWS::ElasticLoadBalancingV2::ListenerRule');
+      expect(rule.Properties.Conditions).to.have.length(1);
+      expect(rule.Properties.Conditions[0].Field).to.equal('host-header');
+      expect(rule.Properties.Conditions[0].HostHeaderConfig.Values).to.have.length(2);
+      expect(rule.Properties.Conditions[0].HostHeaderConfig.Values[0]).to.equal('example1.com');
+      expect(rule.Properties.Conditions[0].HostHeaderConfig.Values[1]).to.equal('example2.com');
+    });
+
     it('should fail validation if no conditions are set', async () => {
       const runServerlessAction = () =>
         runServerless({
           fixture: 'function',
-          cliArgs: ['package'],
+          command: 'package',
           configExt: {
             functions: {
               fnConditionsHostOnly: {
@@ -190,6 +227,53 @@ describe('lib/plugins/aws/package/compile/eents/alb/index.test.js', () => {
       await expect(runServerlessAction())
         .to.eventually.be.rejectedWith(ServerlessError)
         .and.have.property('code', 'ALB_NO_CONDITIONS');
+    });
+  });
+
+  describe('should support `functions[].events[].alb.targetGroupName` property', () => {
+    it('should use it if defined', async () => {
+      const albListenerRuleLogicalId = naming.getAlbTargetGroupLogicalId(
+        'fnAlbTargetGroupName',
+        albId,
+        false
+      );
+
+      expect(cfResources[albListenerRuleLogicalId].Properties.Name).to.equal(
+        'custom-targetgroup-name'
+      );
+    });
+
+    it('should reject if `provider.alb.targetGroupPrefix` is also specified', async () => {
+      const runServerlessAction = () =>
+        runServerless({
+          fixture: 'function',
+          command: 'package',
+          configExt: {
+            provider: {
+              alb: {
+                targetGroupPrefix: 'a-prefix',
+              },
+            },
+            functions: {
+              fnTargetGroupName: {
+                handler: 'index.handler',
+                events: [
+                  {
+                    alb: {
+                      ...validBaseEventConfig,
+                      priority: 1,
+                      targetGroupName: 'custom-targetgroup-name',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        });
+
+      await expect(runServerlessAction())
+        .to.eventually.be.rejectedWith(ServerlessError)
+        .and.have.property('code', 'ALB_TARGET_GROUP_NAME_EXCLUSIVE');
     });
   });
 });

@@ -22,8 +22,11 @@ Here is a list of all available properties in `serverless.yml` when the provider
 service: myService
 
 frameworkVersion: '2'
+configValidationMode: warn # Modes for config validation. `error` throws an exception, `warn` logs error to console, `off` disables validation at all. The default is warn.
 enableLocalInstallationFallback: false # If set to 'true', guarantees that it's a locally (for service, in its node_modules) installed framework which processes the command
 useDotenv: false # If set to 'true', environment variables will be automatically loaded from .env files
+variablesResolutionMode: null # To crash on variable resolution errors (as coming from new resolver), set this value to "20210326"
+unresolvedVariablesNotificationMode: warn # If set to 'error', references to variables that cannot be resolved will result in an error being thrown (applies to legacy resolver)
 
 disabledDeprecations: # Disable deprecation logs by their codes. Default is empty.
   - DEP_CODE_1 # Deprecation code to disable
@@ -31,7 +34,7 @@ disabledDeprecations: # Disable deprecation logs by their codes. Default is empt
 
 provider:
   name: aws
-  runtime: nodejs12.x
+  runtime: nodejs14.x
   stage: dev # Default stage to be used. Default is "dev"
   region: us-east-1 # Default region to be used. Default is "us-east-1"
   stackName: custom-stack-name # Use a custom name for the CloudFormation stack
@@ -57,10 +60,19 @@ provider:
       key1: value1
       key2: value2
   deploymentPrefix: serverless # The S3 prefix under which deployed artifacts should be stored. Default is serverless
-  role: arn:aws:iam::XXXXXX:role/role # Overwrite the default IAM role which is used for all functions
-  rolePermissionsBoundary: arn:aws:iam::XXXXXX:policy/policy # ARN of an Permissions Boundary for the role.
   lambdaHashingVersion: 20201221 # optional, version of hashing algorithm that should be used by the framework
-  cfnRole: arn:aws:iam::XXXXXX:role/role # ARN of an IAM role for CloudFormation service. If specified, CloudFormation uses the role's credentials
+  ecr:
+    scanOnPush: true
+    images: # Definitions of images that later can be referenced by key in `function.image`
+      baseimage:
+        uri: 000000000000.dkr.ecr.us-east-1.amazonaws.com/test-image@sha256:6bb600b4d6e1d7cf521097177d111111ea373edb91984a505333be8ac9455d38 # Image uri of existing Docker image in ECR
+      anotherimage:
+        path: ./image/ # Path to Docker context that will be used when building that image locally
+        file: Dockerfile.dev # Name of Dockerfile that should be used when building image locally. Equal to 'Dockerfile' by default
+        buildArgs:
+          STAGE: ${opt:stage}
+        cacheFrom:
+          - my-image:latest
   cloudFront:
     myCachePolicy1: # used as a reference in function.events[].cloudfront.cachePolicy.name
       DefaultTTL: 60
@@ -104,6 +116,7 @@ provider:
       - ${env:MY_API_KEY} # you can hide it in a serverless variable
     minimumCompressionSize: 1024 # Compress response when larger than specified size in bytes (must be between 0 and 10485760)
     description: Some Description # Optional description for the API Gateway stage deployment
+    disableDefaultEndpoint: true # Optional disable the default 'execute-api' endpoint
     binaryMediaTypes: # Optional binary media types the API might return
       - '*/*'
     metrics:  false # Optional detailed Cloud Watch Metrics
@@ -126,6 +139,12 @@ provider:
       throttle:
         burstLimit: 200
         rateLimit: 100
+    request:
+      schemas: # Optional request schema validation models that can be reused in `http` events. It is always defined for `application/json` content type
+        global-model:
+          name: GlobalModel # Optional: Name of the API Gateway model
+          description: "A global model that can be referenced in functions" # Optional: Description of the API Gateway model
+          schema: ${file(schema.json)}  # Valid JSON Schema
   alb:
     targetGroupPrefix: xxxxxxxxxx # Optional prefix to prepend when generating names for target groups
     authorizers:
@@ -159,30 +178,54 @@ provider:
         sessionTimeout: 7000
   httpApi:
     id: 'my-id' # If we want to attach to externally created HTTP API its id should be provided here
-    name: 'dev-my-service' # Use custom name for the API Gateway API, default is ${opt:stage, self:provider.stage, 'dev'}-${self:service}
-    payload: '1.0' # Specify payload format version for Lambda integration ('1.0' or '2.0'), default is '1.0'
-    cors: true # Implies default behavior, can be fine tuned with specficic options
+    name: 'dev-my-service' # Use custom name for the API Gateway API, default is ${sls:stage}-${self:service}
+    payload: '2.0' # Specify payload format version for Lambda integration ('1.0' or '2.0'), default is '2.0'
+    cors: true # Implies default behavior, can be fine tuned with specific options
     authorizers:
-      # JWT authorizers to back HTTP API endpoints
+      # JWT authorizer to back HTTP API endpoints
       someJwtAuthorizer:
         identitySource: $request.header.Authorization
         issuerUrl: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxx
         audience:
           - xxxx
           - xxxx
+      # Custom Lambda request authorizer to back HTTP API endpoints
+      someCustomLambdaAuthorizer:
+        type: request # Should be set to `request` for custom Lambda authorizers.
+        functionName: authorizerFunc # Mutually exclusive with `functionArn`
+        functionArn: arn:aws:lambda:us-east-1:11111111111:function:external-authorizer # Mutually exclusive with `functionName`
+        name: customAuthorizerName # Optional. Custom name for created authorizer
+        resultTtlInSeconds: 300 # Optional. Time to live for cached authorizer results, accepts values from 0 (no caching) to 3600 (1 hour). When set to non-zero value, `identitySource` must be defined as well.
+        enableSimpleResponses: true # Optional. Flag that specifies if authorizer function will return authorization responses in simple format. Defaults to `false`.
+        payloadVersion: '2.0' # Optional. Version of payload that will be sent to authorizer function. Defaults to `'2.0'`.
+        identitySource: # Optional. One or more mapping expressions of the request parameters in form of e.g `$request.header.Auth`. Specified values are verified to be non-empty and not null by authorizer. It is a required property when `resultTtlInSeconds` is non-zero as `identitySource` is additionally used as cache key for authorizer responses caching.
+          - $request.header.Auth
+          - $request.header.Authorization
+        managedExternally: true # Optional. Applicable only when using externally defined authorizer functions to prevent creation of permission resource
   stackTags: # Optional CF stack tags
     key: value
-  iamManagedPolicies: # Optional IAM Managed Policies, which allows to include the policies into IAM Role
-    - arn:aws:iam:*****:policy/some-managed-policy
-  iamRoleStatements: # IAM role statements so that services can be accessed in the AWS account
-    - Effect: 'Allow'
-      Action:
-        - 's3:ListBucket'
-      Resource:
-        Fn::Join:
-          - ''
-          - - 'arn:aws:s3:::'
-            - Ref: ServerlessDeploymentBucket
+  iam:
+    # Overwrite the default IAM role which is used for all functions
+    role: arn:aws:iam::XXXXXX:role/role
+    # .. OR configure logical role
+    role:
+      name: your-custom-name-role # Optional custom name for default IAM role
+      path: /your-custom-path/ # Optional custom path for default IAM role
+      managedPolicies: # Optional IAM Managed Policies, which allows to include the policies into IAM Role
+        - arn:aws:iam:*****:policy/some-managed-policy
+      permissionsBoundary: arn:aws:iam::XXXXXX:policy/policy # ARN of an Permissions Boundary for the role.
+      statements: # IAM role statements so that services can be accessed in the AWS account
+        - Effect: 'Allow'
+          Action:
+            - 's3:ListBucket'
+          Resource:
+            Fn::Join:
+              - ''
+              - - 'arn:aws:s3:::'
+                - Ref: ServerlessDeploymentBucket
+      tags:
+        key: value
+    deploymentRole: arn:aws:iam::XXXXXX:role/role # ARN of an IAM role for CloudFormation service. If specified, CloudFormation uses the role's credentials
   stackPolicy: # Optional CF stack policy. The example below allows updates to all resources except deleting/replacing EC2 instances (use with caution!)
     - Effect: Allow
       Principal: '*'
@@ -221,10 +264,10 @@ provider:
     foo: bar
     baz: qux
   tracing:
-    apiGateway: true
+    apiGateway: true # Can only be true if API Gateway is inside a stack.
     lambda: true # Optional, can be true (true equals 'Active'), 'Active' or 'PassThrough'
   logs:
-    restApi: # Optional configuration which specifies if API Gateway logs are used. This can either be set to `true` to use defaults, or configured via subproperties.
+    restApi: # Optional configuration which specifies if API Gateway logs are used. This can either be set to `true` to use defaults, or configured via subproperties. Can only be configured if API Gateway is inside a stack.
       accessLogging: true # Optional configuration which enables or disables access logging. Defaults to true.
       format: 'requestId: $context.requestId' # Optional configuration which specifies the log format to use for access logging.
       executionLogging: true # Optional configuration which enables or disables execution logging. Defaults to true.
@@ -240,20 +283,20 @@ provider:
     frameworkLambda: true # Optional, whether to write CloudWatch logs for custom resource lambdas as added by the framework
 
 package: # Optional deployment packaging configuration
-  include: # Specify the directories and files which should be included in the deployment package
+  patterns: # Specify the directories and files which should be included in the deployment package
     - src/**
     - handler.js
-  exclude: # Specify the directories and files which should be excluded in the deployment package
-    - .git/**
-    - .travis.yml
+    - '!.git/**'
+    - '!.travis.yml'
   excludeDevDependencies: false # Config if Serverless should automatically exclude dev dependencies in the deployment package. Defaults to true
   artifact: path/to/my-artifact.zip # Own package that should be used. You must provide this file.
   individually: true # Enables individual packaging for each function. If true you must provide package for each function. Defaults to false
 
 functions:
   usersCreate: # A Function
-    handler: users.create # The file and module for this specific function.
-    name: ${opt:stage, self:provider.stage, 'dev'}-lambdaName # optional, Deployed Lambda name
+    handler: users.create # The file and module for this specific function. Cannot be used when `image` is defined.
+    image: baseimage # Image to be used by function, cannot be used when `handler` is defined. It can be configured as concrete uri of Docker image in ECR or as a reference to image defined in `provider.ecr.images`
+    name: ${sls:stage}-lambdaName # optional, Deployed Lambda name
     description: My function # The description of your function.
     memorySize: 512 # memorySize for this specific function.
     reservedConcurrency: 5 # optional, reserved concurrency limit for this function. By default, AWS uses account concurrency limit
@@ -276,12 +319,11 @@ functions:
         - subnetId1
         - subnetId2
     package:
-      include: # Specify the directories and files which should be included in the deployment package for this specific function.
+      patterns: # Specify the directories and files which should be included in the deployment package for this specific function.
         - src/**
         - handler.js
-      exclude: # Specify the directories and files which should be excluded in the deployment package for this specific function.
-        - .git/**
-        - .travis.yml
+        - '!.git/**'
+        - '!.travis.yml'
       artifact: path/to/my-artifact.zip # Own package that should be use for this specific function. You must provide this file.
       individually: true # Enables individual packaging for specific function. If true you must provide package for each function. Defaults to false
     layers: # An optional list Lambda Layers to use
@@ -327,6 +369,11 @@ functions:
             template: # Optional custom request mapping templates that overwrite default templates
               application/json: '{ "httpMethod" : "$context.httpMethod" }'
             passThrough: NEVER # Optional define pass through behavior when content-type does not match any of the specified mapping templates
+            schemas: # Optional request schema validation, mapped by content type
+              application/json:
+                name: ModelName  # Optional: Name of the API Gateway model
+                description: "Some description" # Optional: Description of the API Gateway model
+                schema: ${file(model_schema.json)} # Schema for selected content type
       - httpApi: # HTTP API endpoint
           method: GET
           path: /some-get-path/{param}
@@ -386,6 +433,7 @@ functions:
       - sqs:
           arn: arn:aws:sqs:region:XXXXXX:myQueue
           batchSize: 10
+          maximumBatchingWindow: 10 # optional, minimum is 0 and the maximum is 300 (seconds)
           enabled: true
       - stream:
           arn: arn:aws:kinesis:region:XXXXXX:stream/foo
@@ -393,6 +441,7 @@ functions:
           maximumRecordAgeInSeconds: 120
           startingPosition: LATEST
           enabled: true
+          functionResponseType: ReportBatchItemFailures
       - msk:
           arn: arn:aws:kafka:us-east-1:111111111111:cluster/ClusterName/a1a1a1a1a1a1a1a1a # ARN of MSK Cluster
           topic: kafkaTopic # name of Kafka topic to consume from
@@ -441,6 +490,7 @@ functions:
       - alb:
           listenerArn: arn:aws:elasticloadbalancing:us-east-1:12345:listener/app/my-load-balancer/50dc6c495c0c9188/
           priority: 1
+          targetGroupName: helloTargetGroup # optional
           conditions:
             host: example.com
             path: /hello
@@ -520,12 +570,10 @@ functions:
             CustomOriginConfig:
               OriginProtocolPolicy: match-viewer
 
-configValidationMode: warn # Modes for config validation. `error` throws an exception, `warn` logs error to console, `off` disables validation at all. The default is warn.
-
 layers:
   hello: # A Lambda layer
     path: layer-dir # required, path to layer contents on disk
-    name: ${opt:stage, self:provider.stage, 'dev'}-layerName # optional, Deployed Lambda layer name
+    name: ${sls:stage}-layerName # optional, Deployed Lambda layer name
     description: Description of what the lambda layer does # optional, Description to publish to AWS
     compatibleRuntimes: # optional, a list of runtimes this layer is compatible with
       - python3.8

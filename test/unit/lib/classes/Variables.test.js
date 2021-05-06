@@ -19,6 +19,7 @@ const Serverless = require('../../../../lib/Serverless');
 const slsError = require('../../../../lib/classes/Error');
 const Utils = require('../../../../lib/classes/Utils');
 const Variables = require('../../../../lib/classes/Variables');
+const ServerlessError = require('../../../../lib/serverless-error');
 const { getTmpDirPath } = require('../../../utils/fs');
 const skipOnDisabledSymlinksInWindows = require('@serverless/test/skip-on-disabled-symlinks-in-windows');
 const runServerless = require('../../../utils/run-serverless');
@@ -274,7 +275,7 @@ describe('Variables', () => {
         awsProvider = new AwsProvider(serverless, {});
         requestStub = sinon
           .stub(awsProvider, 'request')
-          .callsFake(() => BbPromise.reject(new serverless.classes.Error('Not found.', 400)));
+          .callsFake(() => BbPromise.reject(new ServerlessError('Not found.', 400)));
       });
       afterEach(() => {
         requestStub.restore();
@@ -346,22 +347,6 @@ describe('Variables', () => {
       { name: 'region', getter: (provider) => provider.getRegion() },
       { name: 'stage', getter: (provider) => provider.getStage() },
       { name: 'profile', getter: (provider) => provider.getProfile() },
-      {
-        name: 'credentials',
-        getter: (provider) => provider.serverless.service.provider.credentials,
-      },
-      {
-        name: 'credentials.accessKeyId',
-        getter: (provider) => provider.serverless.service.provider.credentials.accessKeyId,
-      },
-      {
-        name: 'credentials.secretAccessKey',
-        getter: (provider) => provider.serverless.service.provider.credentials.secretAccessKey,
-      },
-      {
-        name: 'credentials.sessionToken',
-        getter: (provider) => provider.serverless.service.provider.credentials.sessionToken,
-      },
     ];
     describe('basic population tests', () => {
       prepopulatedProperties.forEach((property) => {
@@ -474,7 +459,7 @@ describe('Variables', () => {
     });
     it('should populate object and return it', () => {
       const object = {
-        stage: '${opt:stage}', // eslint-disable-line no-template-curly-in-string
+        stage: '${opt:stage}',
       };
       const expectedPopulatedObject = {
         stage: 'prod',
@@ -492,7 +477,7 @@ describe('Variables', () => {
 
     it('should persist keys with dot notation', () => {
       const object = {
-        stage: '${opt:stage}', // eslint-disable-line no-template-curly-in-string
+        stage: '${opt:stage}',
       };
       object['some.nested.key'] = 'hello';
       const expectedPopulatedObject = {
@@ -529,7 +514,7 @@ describe('Variables', () => {
       });
       it('should properly replace self-references', () => {
         service.custom = {
-          me: '${self:}', // eslint-disable-line no-template-curly-in-string
+          me: '${self:}',
         };
         const expected = makeDefault();
         expected.custom = {
@@ -713,8 +698,8 @@ describe('Variables', () => {
       it('should properly replace duplicate variable declarations', () => {
         service.custom = {
           val0: 'my value',
-          val1: '${self:custom.val0}', // eslint-disable-line no-template-curly-in-string
-          val2: '${self:custom.val0}', // eslint-disable-line no-template-curly-in-string
+          val1: '${self:custom.val0}',
+          val2: '${self:custom.val0}',
         };
         const expected = {
           val0: 'my value',
@@ -729,10 +714,10 @@ describe('Variables', () => {
       });
       it('should recursively populate, regardless of order and duplication', () => {
         service.custom = {
-          val1: '${self:custom.depVal}', // eslint-disable-line no-template-curly-in-string
-          depVal: '${self:custom.val0}', // eslint-disable-line no-template-curly-in-string
+          val1: '${self:custom.depVal}',
+          depVal: '${self:custom.val0}',
           val0: 'my value',
-          val2: '${self:custom.depVal}', // eslint-disable-line no-template-curly-in-string
+          val2: '${self:custom.depVal}',
         };
         const expected = {
           val1: 'my value',
@@ -1037,7 +1022,7 @@ describe('Variables', () => {
         beforeEach(() => {
           tmpDirPath = getTmpDirPath();
           fse.mkdirsSync(tmpDirPath);
-          serverless.config.update({ servicePath: tmpDirPath });
+          serverless.serviceDir = tmpDirPath;
         });
         afterEach(() => {
           fse.removeSync(tmpDirPath);
@@ -1071,8 +1056,8 @@ module.exports = {
         it('should populate any given variable only once', () => {
           makeTempFile(asyncFileName, asyncContent);
           service.custom = {
-            val1: '${self:custom.val0}', // eslint-disable-line no-template-curly-in-string
-            val2: '${self:custom.val1}', // eslint-disable-line no-template-curly-in-string
+            val1: '${self:custom.val0}',
+            val2: '${self:custom.val1}',
             val0: `\${file(${asyncFileName}):str}`,
           };
           const expected = {
@@ -1085,8 +1070,8 @@ module.exports = {
         it('should still work with a default file name in double or single quotes', () => {
           makeTempFile(asyncFileName, asyncContent);
           service.custom = {
-            val1: '${self:custom.val0}', // eslint-disable-line no-template-curly-in-string
-            val2: '${self:custom.val1}', // eslint-disable-line no-template-curly-in-string
+            val1: '${self:custom.val0}',
+            val2: '${self:custom.val1}',
             val3: `\${file(\${self:custom.nonexistent, "${asyncFileName}"}):str}`,
             val0: `\${file(\${self:custom.nonexistent, '${asyncFileName}'}):str}`,
           };
@@ -1101,15 +1086,15 @@ module.exports = {
         it('should populate any given variable only once regardless of ordering or reference count', () => {
           makeTempFile(asyncFileName, asyncContent);
           service.custom = {
-            val9: '${self:custom.val7}', // eslint-disable-line no-template-curly-in-string
-            val7: '${self:custom.val5}', // eslint-disable-line no-template-curly-in-string
-            val5: '${self:custom.val3}', // eslint-disable-line no-template-curly-in-string
-            val3: '${self:custom.val1}', // eslint-disable-line no-template-curly-in-string
-            val1: '${self:custom.val0}', // eslint-disable-line no-template-curly-in-string
-            val2: '${self:custom.val1}', // eslint-disable-line no-template-curly-in-string
-            val4: '${self:custom.val3}', // eslint-disable-line no-template-curly-in-string
-            val6: '${self:custom.val5}', // eslint-disable-line no-template-curly-in-string
-            val8: '${self:custom.val7}', // eslint-disable-line no-template-curly-in-string
+            val9: '${self:custom.val7}',
+            val7: '${self:custom.val5}',
+            val5: '${self:custom.val3}',
+            val3: '${self:custom.val1}',
+            val1: '${self:custom.val0}',
+            val2: '${self:custom.val1}',
+            val4: '${self:custom.val3}',
+            val6: '${self:custom.val5}',
+            val8: '${self:custom.val7}',
             val0: `\${file(${asyncFileName}):str}`,
           };
           const expected = {
@@ -1184,7 +1169,7 @@ module.exports = {
           return serverless.variables
             .populateObject(service.custom)
             .should.be.rejectedWith(
-              serverless.classes.Error,
+              ServerlessError,
               'Invalid variable syntax when referencing file'
             );
         });
@@ -1228,15 +1213,15 @@ module.exports = {
     it('should not allow partially double-quoted string', () => {
       const property = '${opt:stage, prefix"prod"suffix}';
       serverless.variables.options = {};
-      const warnIfNotFoundSpy = sinon.spy(serverless.variables, 'warnIfNotFound');
+      const handleUnresolvedSpy = sinon.spy(serverless.variables, 'handleUnresolved');
       return serverless.variables
         .populateProperty(property)
         .should.become(undefined)
         .then(() => {
-          expect(warnIfNotFoundSpy.callCount).to.equal(1);
+          expect(handleUnresolvedSpy.callCount).to.equal(1);
         })
         .finally(() => {
-          warnIfNotFoundSpy.restore();
+          handleUnresolvedSpy.restore();
         });
     });
 
@@ -1255,15 +1240,15 @@ module.exports = {
     it('should not match a boolean with value containing word true or false if overwrite syntax provided', () => {
       const property = '${opt:stage, foofalsebar}';
       serverless.variables.options = {};
-      const warnIfNotFoundSpy = sinon.spy(serverless.variables, 'warnIfNotFound');
+      const handleUnresolvedSpy = sinon.spy(serverless.variables, 'handleUnresolved');
       return serverless.variables
         .populateProperty(property)
         .should.become(undefined)
         .then(() => {
-          expect(warnIfNotFoundSpy.callCount).to.equal(1);
+          expect(handleUnresolvedSpy.callCount).to.equal(1);
         })
         .finally(() => {
-          warnIfNotFoundSpy.restore();
+          handleUnresolvedSpy.restore();
         });
     });
 
@@ -1297,18 +1282,18 @@ module.exports = {
       const requestStub = sinon
         .stub(awsProvider, 'request')
         .callsFake(() => BbPromise.reject(error));
-      const warnIfNotFoundSpy = sinon.spy(serverless.variables, 'warnIfNotFound');
+      const handleUnresolvedSpy = sinon.spy(serverless.variables, 'handleUnresolved');
 
       return serverless.variables
         .populateProperty(property)
         .should.become(undefined)
         .then(() => {
           expect(requestStub.callCount).to.equal(1);
-          expect(warnIfNotFoundSpy.callCount).to.equal(1);
+          expect(handleUnresolvedSpy.callCount).to.equal(1);
         })
         .finally(() => {
           requestStub.restore();
-          warnIfNotFoundSpy.restore();
+          handleUnresolvedSpy.restore();
         });
     });
 
@@ -1321,13 +1306,13 @@ module.exports = {
       const awsProvider = new AwsProvider(serverless, options);
       const param = '/some/path/to/invalidparam';
       const property = `\${ssm:${param}}`;
-      const error = new serverless.classes.Error('Some random failure.', 123);
+      const error = new ServerlessError('Some random failure.', 123);
       const requestStub = sinon
         .stub(awsProvider, 'request')
         .callsFake(() => BbPromise.reject(error));
       return serverless.variables
         .populateProperty(property)
-        .should.be.rejectedWith(serverless.classes.Error)
+        .should.be.rejectedWith(ServerlessError)
         .then(() => expect(requestStub.callCount).to.equal(1))
         .finally(() => requestStub.restore());
     });
@@ -1365,7 +1350,7 @@ module.exports = {
   describe('#populateVariable()', () => {
     it('should populate string variables as sub string', () => {
       const valueToPopulate = 'dev';
-      const matchedString = '${opt:stage}'; // eslint-disable-line no-template-curly-in-string
+      const matchedString = '${opt:stage}';
       // eslint-disable-next-line no-template-curly-in-string
       const property = 'my stage is ${opt:stage}';
       serverless.variables
@@ -1375,7 +1360,7 @@ module.exports = {
 
     it('should populate number variables as sub string', () => {
       const valueToPopulate = 5;
-      const matchedString = '${opt:number}'; // eslint-disable-line no-template-curly-in-string
+      const matchedString = '${opt:number}';
       // eslint-disable-next-line no-template-curly-in-string
       const property = 'your account number is ${opt:number}';
       serverless.variables
@@ -1385,8 +1370,8 @@ module.exports = {
 
     it('should populate non string variables', () => {
       const valueToPopulate = 5;
-      const matchedString = '${opt:number}'; // eslint-disable-line no-template-curly-in-string
-      const property = '${opt:number}'; // eslint-disable-line no-template-curly-in-string
+      const matchedString = '${opt:number}';
+      const property = '${opt:number}';
       return serverless.variables
         .populateVariable(property, matchedString, valueToPopulate)
         .should.equal(5);
@@ -1394,12 +1379,12 @@ module.exports = {
 
     it('should throw error if populating non string or non number variable as sub string', () => {
       const valueToPopulate = {};
-      const matchedString = '${opt:object}'; // eslint-disable-line no-template-curly-in-string
+      const matchedString = '${opt:object}';
       // eslint-disable-next-line no-template-curly-in-string
       const property = 'your account number is ${opt:object}';
       return expect(() =>
         serverless.variables.populateVariable(property, matchedString, valueToPopulate)
-      ).to.throw(serverless.classes.Error);
+      ).to.throw(ServerlessError);
     });
   });
 
@@ -1659,7 +1644,7 @@ module.exports = {
     it('should reject invalid sources', () =>
       serverless.variables
         .getValueFromSource('weird:source')
-        .should.be.rejectedWith(serverless.classes.Error));
+        .should.be.rejectedWith(ServerlessError));
 
     describe('caching', () => {
       const sources = [
@@ -1838,7 +1823,7 @@ module.exports = {
         },
       };
       SUtils.writeFileSync(path.join(tmpDirPath, 'config.yml'), yaml.dump(configYml));
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./config.yml)')
         .should.eventually.eql(configYml);
@@ -1846,7 +1831,7 @@ module.exports = {
 
     it('should get undefined if non existing file and the second argument is true', () => {
       const tmpDirPath = getTmpDirPath();
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       const realpathSync = sinon.spy(fse, 'realpathSync');
       const existsSync = sinon.spy(fse, 'existsSync');
       return serverless.variables
@@ -1866,7 +1851,7 @@ module.exports = {
       const SUtils = new Utils();
       const tmpDirPath = getTmpDirPath();
       SUtils.writeFileSync(path.join(tmpDirPath, 'someFile'), 'hello world');
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables.getValueFromFile('file(./someFile)').should.become('hello world');
     });
 
@@ -1882,7 +1867,7 @@ module.exports = {
         skipOnDisabledSymlinksInWindows(error, this, afterCallback);
         throw error;
       }
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./refSomeFile)')
         .should.become('hello world')
@@ -1897,7 +1882,7 @@ module.exports = {
       const SUtils = new Utils();
       const tmpDirPath = getTmpDirPath();
       SUtils.writeFileSync(path.join(tmpDirPath, 'someFile'), 'hello world \n');
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables.getValueFromFile('file(./someFile)').should.become('hello world');
     });
 
@@ -1913,7 +1898,7 @@ module.exports = {
         },
       };
       SUtils.writeFileSync(path.join(tmpDirPath, 'config.yml'), yaml.dump(configYml));
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./config.yml):test2.sub')
         .should.become(configYml.test2.sub);
@@ -1924,7 +1909,7 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports.hello=function(){return "hello world";};';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./hello.js):hello')
         .should.become('hello world');
@@ -1935,7 +1920,7 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports.hello="hello world";';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./hello.js):hello')
         .should.become('hello world');
@@ -1946,7 +1931,7 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports=function(){return { hello: "hello world" };};';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./hello.js)')
         .should.become({ hello: 'hello world' });
@@ -1957,7 +1942,7 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports={ hello: "hello world" };';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./hello.js)')
         .should.become({ hello: 'hello world' });
@@ -1968,7 +1953,7 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports="hello world";';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables.getValueFromFile('file(./hello.js)').should.become('hello world');
     });
 
@@ -1979,7 +1964,7 @@ module.exports = {
         return {one:{two:{three: 'hello world'}}}
       };`;
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       serverless.variables.loadVariableSyntax();
       return serverless.variables
         .getValueFromFile('file(./hello.js):hello.one.two.three')
@@ -1993,7 +1978,7 @@ module.exports = {
       module.exports.one = {two: {three: 'hello world'}}
       module.exports.hello=function(){ return this; };`;
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       serverless.variables.loadVariableSyntax();
       return serverless.variables
         .getValueFromFile('file(./hello.js):hello.one.two.three')
@@ -2012,10 +1997,10 @@ module.exports = {
         },
       };
       SUtils.writeFileSync(path.join(tmpDirPath, 'config.yml'), yaml.dump(configYml));
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./config.yml).testObj.sub')
-        .should.be.rejectedWith(serverless.classes.Error);
+        .should.be.rejectedWith(ServerlessError);
     });
 
     it('should throw an error if resolved value is undefined', () => {
@@ -2023,10 +2008,10 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports=undefined;';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./hello.js)')
-        .should.be.rejectedWith(serverless.classes.Error);
+        .should.be.rejectedWith(ServerlessError);
     });
 
     it('should throw an error if resolved value is a symbol', () => {
@@ -2034,10 +2019,10 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports=Symbol()';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./hello.js)')
-        .should.be.rejectedWith(serverless.classes.Error);
+        .should.be.rejectedWith(ServerlessError);
     });
 
     it('should throw an error if resolved value is a function', () => {
@@ -2045,10 +2030,10 @@ module.exports = {
       const tmpDirPath = getTmpDirPath();
       const jsData = 'module.exports=function(){ return function(){}; };';
       SUtils.writeFileSync(path.join(tmpDirPath, 'hello.js'), jsData);
-      serverless.config.update({ servicePath: tmpDirPath });
+      serverless.serviceDir = tmpDirPath;
       return serverless.variables
         .getValueFromFile('file(./hello.js)')
-        .should.be.rejectedWith(serverless.classes.Error);
+        .should.be.rejectedWith(ServerlessError);
     });
   });
 
@@ -2155,7 +2140,7 @@ module.exports = {
       return serverless.variables
         .getValueFromCf('cf:some-stack.DoestNotExist')
         .should.be.rejectedWith(
-          serverless.classes.Error,
+          ServerlessError,
           /to request a non exported variable from CloudFormation/
         )
         .then(() => {
@@ -2214,7 +2199,7 @@ module.exports = {
         .callsFake(() => BbPromise.reject(error));
       return expect(serverless.variables.getValueFromS3('s3:some.bucket/path/to/key'))
         .to.be.rejectedWith(
-          serverless.classes.Error,
+          ServerlessError,
           'Error getting value for s3:some.bucket/path/to/key. The specified bucket is not valid'
         )
         .then()
@@ -2659,7 +2644,7 @@ module.exports = {
       serverless.variables.service = {
         service: 'testService',
         custom: {
-          anotherVar: '${self:custom.var}', // eslint-disable-line no-template-curly-in-string
+          anotherVar: '${self:custom.var}',
         },
         provider: serverless.service.provider,
       };
@@ -2669,10 +2654,12 @@ module.exports = {
         .should.become('${deep:0.veryDeep}');
     });
   });
-  describe('#warnIfNotFound()', () => {
+
+  describe('#handleUnresolved()', () => {
     let logWarningSpy;
     let consoleLogStub;
     let varProxy;
+
     beforeEach(() => {
       logWarningSpy = sinon.spy(slsError, 'logWarning');
       consoleLogStub = sinon.stub(console, 'log').returns();
@@ -2681,62 +2668,73 @@ module.exports = {
       });
       varProxy = new ProxyQuiredVariables(serverless);
     });
+
     afterEach(() => {
       logWarningSpy.restore();
       consoleLogStub.restore();
     });
+
     it('should do nothing if variable has valid value.', () => {
-      varProxy.warnIfNotFound('self:service', 'a-valid-value');
+      varProxy.handleUnresolved('self:service', 'a-valid-value');
       expect(logWarningSpy).to.not.have.been.calledOnce;
     });
+
     describe('when variable string does not match any of syntax', () => {
       // These situation happen when deep variable population fails
       it('should do nothing if variable has null value.', () => {
-        varProxy.warnIfNotFound('', null);
+        varProxy.handleUnresolved('', null);
         expect(logWarningSpy).to.not.have.been.calledOnce;
       });
+
       it('should do nothing if variable has undefined value.', () => {
-        varProxy.warnIfNotFound('', undefined);
+        varProxy.handleUnresolved('', undefined);
         expect(logWarningSpy).to.not.have.been.calledOnce;
       });
+
       it('should do nothing if variable has empty object value.', () => {
-        varProxy.warnIfNotFound('', {});
+        varProxy.handleUnresolved('', {});
         expect(logWarningSpy).to.not.have.been.calledOnce;
       });
     });
     it('should log if variable has null value.', () => {
-      varProxy.warnIfNotFound('self:service', null);
+      varProxy.handleUnresolved('self:service', null);
       expect(logWarningSpy).to.have.been.calledOnce;
     });
     it('should log if variable has undefined value.', () => {
-      varProxy.warnIfNotFound('self:service', undefined);
+      varProxy.handleUnresolved('self:service', undefined);
       expect(logWarningSpy).to.have.been.calledOnce;
     });
+
     it('should log if variable has empty object value.', () => {
-      varProxy.warnIfNotFound('self:service', {});
+      varProxy.handleUnresolved('self:service', {});
       expect(logWarningSpy).to.have.been.calledOnce;
     });
+
     it('should not log if variable has empty array value.', () => {
-      varProxy.warnIfNotFound('self:service', []);
+      varProxy.handleUnresolved('self:service', []);
       expect(logWarningSpy).to.not.have.been.called;
     });
+
     it('should detect the "environment variable" variable type', () => {
-      varProxy.warnIfNotFound('env:service', null);
+      varProxy.handleUnresolved('env:service', null);
       expect(logWarningSpy).to.have.been.calledOnce;
       expect(logWarningSpy.args[0][0]).to.contain('environment variable');
     });
+
     it('should detect the "option" variable type', () => {
-      varProxy.warnIfNotFound('opt:service', null);
+      varProxy.handleUnresolved('opt:service', null);
       expect(logWarningSpy).to.have.been.calledOnce;
       expect(logWarningSpy.args[0][0]).to.contain('option');
     });
+
     it('should detect the "service attribute" variable type', () => {
-      varProxy.warnIfNotFound('self:service', null);
+      varProxy.handleUnresolved('self:service', null);
       expect(logWarningSpy).to.have.been.calledOnce;
       expect(logWarningSpy.args[0][0]).to.contain('service attribute');
     });
+
     it('should detect the "file" variable type', () => {
-      varProxy.warnIfNotFound('file(service)', null);
+      varProxy.handleUnresolved('file(service)', null);
       expect(logWarningSpy).to.have.been.calledOnce;
       expect(logWarningSpy.args[0][0]).to.contain('file');
     });
@@ -2747,8 +2745,9 @@ describe('test/unit/lib/classes/Variables.test.js', () => {
   let processedConfig = null;
   before(async () => {
     const result = await runServerless({
-      fixture: 'variables',
-      cliArgs: ['print'],
+      fixture: 'variables-legacy',
+      command: 'print',
+      shouldUseLegacyVariablesResolver: true,
     });
     processedConfig = result.serverless.service;
   });
@@ -2761,6 +2760,27 @@ describe('test/unit/lib/classes/Variables.test.js', () => {
 
   it('should support ${file(...):key} syntax', () => {
     expect(processedConfig.custom.importedFileWithKey).to.equal('bar');
+  });
+
+  it('should support ${file(...)} syntax for Terraform state', () => {
+    expect(processedConfig.custom.importedTerraformState).to.deep.equal({
+      version: 4,
+      terraform_version: '0.14.4',
+      serial: 11,
+      lineage: '12ab3c45-abc1-0a1b-1a23-a12b34567c89',
+      outputs: {
+        listenerarn: {
+          value:
+            'arn:aws:elasticloadbalancing:us-west-2:123456789876:listener/app/myapp/1a2b3c4f1a23456b/a1b23c45de6789fa',
+          type: 'string',
+        },
+      },
+      resources: [],
+    });
+  });
+
+  it('should support ${file(...):key} syntax for Terraform state', () => {
+    expect(processedConfig.custom.importedTerraformStateWithKey).to.equal('string');
   });
 
   it('should ignore native CloudFormation variables', () => {
@@ -2779,5 +2799,120 @@ describe('test/unit/lib/classes/Variables.test.js', () => {
   });
   it('should support nested resolution', () => {
     expect(processedConfig.custom.nestedReference).to.equal('resolvedNested');
+  });
+
+  it('should handle resolving variables when `prototype` is part of the path', async () => {
+    expect(processedConfig.custom.prototype.nestedInPrototype).to.equal('bar-in-prototype');
+  });
+
+  describe('variable resolving', () => {
+    describe('when unresolvedVariablesNotificationMode is set to "error"', () => {
+      it('should error for missing "environment variable" type variables', async () => {
+        await expect(
+          runServerless({
+            fixture: 'variables-legacy',
+            command: 'print',
+            configExt: {
+              unresolvedVariablesNotificationMode: 'error',
+              custom: { myVariable: '${env:missingEnvVar}' },
+            },
+            shouldUseLegacyVariablesResolver: true,
+          })
+        ).to.eventually.be.rejected.and.have.property('code', 'UNRESOLVED_CONFIG_VARIABLE');
+      });
+
+      it('should error for missing "option" type variables', async () => {
+        await expect(
+          runServerless({
+            fixture: 'variables-legacy',
+            command: 'print',
+            configExt: {
+              unresolvedVariablesNotificationMode: 'error',
+              custom: { myVariable: '${opt:missingOpt}' },
+            },
+            shouldUseLegacyVariablesResolver: true,
+          })
+        ).to.eventually.be.rejected.and.have.property('code', 'UNRESOLVED_CONFIG_VARIABLE');
+      });
+
+      it('should error for missing "service attribute" type variables', async () => {
+        await expect(
+          runServerless({
+            fixture: 'variables-legacy',
+            command: 'print',
+            configExt: {
+              unresolvedVariablesNotificationMode: 'error',
+              custom: { myVariable: '${self:missingAttribute}' },
+            },
+            shouldUseLegacyVariablesResolver: true,
+          })
+        ).to.eventually.be.rejected.and.have.property('code', 'UNRESOLVED_CONFIG_VARIABLE');
+      });
+
+      it('should error for missing "file" type variables', async () => {
+        await expect(
+          runServerless({
+            fixture: 'variables-legacy',
+            command: 'print',
+            configExt: {
+              unresolvedVariablesNotificationMode: 'error',
+              custom: { myVariable: '${file(./missingFile)}' },
+            },
+            shouldUseLegacyVariablesResolver: true,
+          })
+        ).to.eventually.be.rejected.and.have.property('code', 'UNRESOLVED_CONFIG_VARIABLE');
+      });
+    });
+
+    describe('when unresolvedVariablesNotificationMode is set to "warn"', () => {
+      it('prints warnings to the console but no deprecation message', async () => {
+        const { serverless, stdoutData } = await runServerless({
+          fixture: 'variables-legacy',
+          command: 'print',
+          configExt: {
+            unresolvedVariablesNotificationMode: 'warn',
+            custom: {
+              myVariable1: '${env:missingEnvVar}',
+              myVariable2: '${opt:missingOpt}',
+              myVariable3: '${self:missingAttribute}',
+              myVariable4: '${file(./missingFile)}',
+            },
+          },
+          shouldUseLegacyVariablesResolver: true,
+        });
+
+        expect(Array.from(serverless.triggeredDeprecations)).not.to.contain(
+          'VARIABLES_ERROR_ON_UNRESOLVED'
+        );
+
+        expect(stdoutData).to.include('Serverless Warning');
+        expect(stdoutData).to.include('A valid environment variable to satisfy the declaration');
+        expect(stdoutData).to.include('A valid option to satisfy the declaration');
+        expect(stdoutData).to.include('A valid service attribute to satisfy the declaration');
+        expect(stdoutData).to.include('A valid file to satisfy the declaration');
+      });
+    });
+
+    describe('when unresolvedVariablesNotificationMode is not set', () => {
+      it('should warn and print a deprecation message', async () => {
+        const { serverless } = await runServerless({
+          fixture: 'variables-legacy',
+          command: 'print',
+          configExt: {
+            custom: {
+              myVariable1: '${env:missingEnvVar}',
+              myVariable2: '${opt:missingOpt}',
+              myVariable3: '${self:missingAttribute}',
+              myVariable4: '${file(./missingFile)}',
+            },
+          },
+          shouldUseLegacyVariablesResolver: true,
+        });
+
+        expect(Array.from(serverless.triggeredDeprecations)).to.contain(
+          'VARIABLES_ERROR_ON_UNRESOLVED'
+        );
+      });
+    });
   });
 });

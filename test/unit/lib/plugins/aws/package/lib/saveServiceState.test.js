@@ -18,7 +18,7 @@ describe('#saveServiceState()', () => {
     serverless = new Serverless();
     serverless.setProvider('aws', new AwsProvider(serverless, options));
     awsPackage = new AwsPackage(serverless, options);
-    serverless.config.servicePath = 'my-service';
+    serverless.serviceDir = 'my-service';
     serverless.service = {
       provider: {
         compiledCloudFormationTemplate: 'compiled content',
@@ -42,35 +42,34 @@ describe('#saveServiceState()', () => {
 
   it('should write the service state file template to disk', () => {
     const filePath = path.join(
-      awsPackage.serverless.config.servicePath,
+      awsPackage.serverless.serviceDir,
       '.serverless',
       'service-state.json'
     );
 
-    return awsPackage.saveServiceState().then(() => {
-      const expectedStateFileContent = {
-        service: {
-          provider: {
-            compiledCloudFormationTemplate: 'compiled content',
-          },
+    awsPackage.saveServiceState();
+    const expectedStateFileContent = {
+      service: {
+        provider: {
+          compiledCloudFormationTemplate: 'compiled content',
         },
-        package: {
-          individually: false,
-          artifactDirectoryName: 'artifact-directory',
-          artifact: 'service.zip',
-        },
-      };
+      },
+      package: {
+        individually: false,
+        artifactDirectoryName: 'artifact-directory',
+        artifact: 'service.zip',
+      },
+    };
 
-      expect(getServiceStateFileNameStub.calledOnce).to.equal(true);
-      expect(
-        writeFileSyncStub.calledWithExactly(filePath, expectedStateFileContent, true)
-      ).to.equal(true);
-    });
+    expect(getServiceStateFileNameStub.calledOnce).to.equal(true);
+    expect(writeFileSyncStub.calledWithExactly(filePath, expectedStateFileContent, true)).to.equal(
+      true
+    );
   });
 
   it('should remove self references correctly', () => {
     const filePath = path.join(
-      awsPackage.serverless.config.servicePath,
+      awsPackage.serverless.serviceDir,
       '.serverless',
       'service-state.json'
     );
@@ -79,27 +78,26 @@ describe('#saveServiceState()', () => {
       mySelfRef: serverless.service,
     };
 
-    return awsPackage.saveServiceState().then(() => {
-      const expectedStateFileContent = {
-        service: {
-          provider: {
-            compiledCloudFormationTemplate: 'compiled content',
-          },
-          custom: {
-            mySelfRef: '${self:}',
-          },
+    awsPackage.saveServiceState();
+    const expectedStateFileContent = {
+      service: {
+        provider: {
+          compiledCloudFormationTemplate: 'compiled content',
         },
-        package: {
-          individually: false,
-          artifactDirectoryName: 'artifact-directory',
-          artifact: 'service.zip',
+        custom: {
+          mySelfRef: '${self:}',
         },
-      };
+      },
+      package: {
+        individually: false,
+        artifactDirectoryName: 'artifact-directory',
+        artifact: 'service.zip',
+      },
+    };
 
-      expect(getServiceStateFileNameStub.calledOnce).to.equal(true);
-      expect(
-        writeFileSyncStub.calledWithExactly(filePath, expectedStateFileContent, true)
-      ).to.equal(true);
-    });
+    expect(getServiceStateFileNameStub.calledOnce).to.equal(true);
+    expect(writeFileSyncStub.calledWithExactly(filePath, expectedStateFileContent, true)).to.equal(
+      true
+    );
   });
 });

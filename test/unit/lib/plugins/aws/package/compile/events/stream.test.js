@@ -1598,7 +1598,7 @@ describe('AwsCompileStreamEvents #2', () => {
             },
           },
         },
-        cliArgs: ['package'],
+        command: 'package',
       });
       naming = awsNaming;
       const streamLogicalId = awsNaming.getStreamLogicalId('foo', 'kinesis', 'myStream');
@@ -1622,6 +1622,38 @@ describe('AwsCompileStreamEvents #2', () => {
     it('should depend on provisioned alias', () => {
       const aliasLogicalId = naming.getLambdaProvisionedConcurrencyAliasLogicalId('foo');
       expect(eventSourceMappingResource.DependsOn).to.include(aliasLogicalId);
+    });
+  });
+  describe('with custom checkpoint enabled', () => {
+    let eventSourceMappingResource;
+
+    before(async () => {
+      const { awsNaming, cfTemplate } = await runServerless({
+        fixture: 'function',
+        configExt: {
+          functions: {
+            foo: {
+              events: [
+                {
+                  stream: {
+                    arn: 'arn:aws:kinesis:us-east-1:123456789012:stream/myStream',
+                    functionResponseType: 'ReportBatchItemFailures',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        command: 'package',
+      });
+      const streamLogicalId = awsNaming.getStreamLogicalId('foo', 'kinesis', 'myStream');
+      eventSourceMappingResource = cfTemplate.Resources[streamLogicalId];
+    });
+
+    it('should use functionResponseTypes', () => {
+      expect(eventSourceMappingResource.Properties.FunctionResponseTypes).to.include.members([
+        'ReportBatchItemFailures',
+      ]);
     });
   });
 });

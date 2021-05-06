@@ -1,6 +1,7 @@
 'use strict';
 
 const expect = require('chai').expect;
+const _ = require('lodash');
 
 const SDK = require('../../../../../../lib/plugins/aws/provider');
 const Serverless = require('../../../../../../lib/Serverless');
@@ -105,6 +106,12 @@ describe('#naming()', () => {
     it('should return `/`', () => {
       expect(sdk.naming.getRolePath()).to.equal('/');
     });
+
+    it('uses custom role path', () => {
+      const customRolePath = '/custom-role-path/';
+      _.set(sdk.naming.provider, 'serverless.service.provider.iam.role.path', customRolePath);
+      expect(sdk.naming.getRolePath()).to.eql(customRolePath);
+    });
   });
 
   describe('#getRoleName()', () => {
@@ -121,6 +128,11 @@ describe('#naming()', () => {
           ],
         ],
       });
+    });
+    it('uses custom role name', () => {
+      const customRoleName = 'custom-default-role';
+      _.set(sdk.naming.provider, 'serverless.service.provider.iam.role.name', customRoleName);
+      expect(sdk.naming.getRoleName()).to.eql(customRoleName);
     });
   });
 
@@ -410,20 +422,16 @@ describe('#naming()', () => {
 
   describe('#getValidatorLogicalId()', () => {
     it('', () => {
-      expect(sdk.naming.getValidatorLogicalId('ResourceId', 'get')).to.equal(
-        'ApiGatewayMethodResourceIdGetValidator'
-      );
+      serverless.service.service = 'my-Service';
+      expect(sdk.naming.getValidatorLogicalId()).to.equal('ApiGatewayMyServiceRequestValidator');
     });
   });
 
-  describe('#getModelLogicalId()', () => {
+  describe('#getEndpointModelLogicalId()', () => {
     it('', () => {
-      expect(sdk.naming.getModelLogicalId('ResourceId', 'get', 'application/json')).to.equal(
-        'ApiGatewayMethodResourceIdGetApplicationJsonModel'
-      );
       expect(
-        sdk.naming.getModelLogicalId('Example', 'post', 'application/x-www-form-urlencoded')
-      ).to.equal('ApiGatewayMethodExamplePostApplicationXWwwFormUrlencodedModel');
+        sdk.naming.getEndpointModelLogicalId('ResourceId', 'get', 'application/json')
+      ).to.equal('ApiGatewayMethodResourceIdGetApplicationJsonModel');
     });
   });
 
@@ -727,6 +735,25 @@ describe('#naming()', () => {
     });
   });
 
+  describe('#getKafkaEventLogicalId()', () => {
+    it('should normalize the function name and append topic name', () => {
+      expect(sdk.naming.getKafkaEventLogicalId('functionName', 'kafka-topic')).to.equal(
+        'FunctionNameEventSourceMappingKafkaKafkatopic'
+      );
+    });
+
+    it('should normalize long function name and append topic name', () => {
+      expect(
+        sdk.naming.getKafkaEventLogicalId(
+          'functionName',
+          'myVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicName'
+        )
+      ).to.equal(
+        'FunctionNameEventSourceMappingKafkaMyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVeryLongTopicNamemyVery'
+      );
+    });
+  });
+
   describe('#getMSKEventLogicalId()', () => {
     it('should normalize the function name and append normalized cluster and topic names', () => {
       expect(
@@ -757,10 +784,10 @@ describe('#naming()', () => {
     });
   });
 
-  describe('#getAlbTargetGroupName()', () => {
+  describe('#generateAlbTargetGroupName()', () => {
     it('should return a unique identifier based on the service name, function name, alb id, multi-value attribute and stage', () => {
       serverless.service.service = 'myService';
-      expect(sdk.naming.getAlbTargetGroupName('functionName', 'abc123', true)).to.equal(
+      expect(sdk.naming.generateAlbTargetGroupName('functionName', 'abc123', true)).to.equal(
         '79039bd239ac0b3f6ff6d9296f23e27c'
       );
     });
@@ -769,7 +796,7 @@ describe('#naming()', () => {
       serverless.service.service = 'myService';
       serverless.service.provider.alb = {};
       serverless.service.provider.alb.targetGroupPrefix = 'myPrefix-';
-      expect(sdk.naming.getAlbTargetGroupName('functionName', 'abc123', true)).to.equal(
+      expect(sdk.naming.generateAlbTargetGroupName('functionName', 'abc123', true)).to.equal(
         'myPrefix-79039bd239ac0b3f6ff6d92'
       );
     });
@@ -952,6 +979,48 @@ describe('#naming()', () => {
           },
         })
       ).to.equal('custom/FnJoinRefApiGatewayRestApiexecuteapi');
+    });
+  });
+
+  describe('#getEcrRepositoryName', () => {
+    it('should correctly trim trailing dash and ensure no consecutive dashes are present', () => {
+      serverless.service.serviceObject = { name: 'service--with-weird-dashes---' };
+      sdk.options.stage = 'stage--with-dash-';
+      expect(sdk.naming.getEcrRepositoryName()).to.equal(
+        'serverless-service-with-weird-dashes-stage-with-dash'
+      );
+    });
+  });
+
+  describe('#getEventBridgeEventBusLogicalId()', () => {
+    it('should normalize the event bus name and append correct suffix', () => {
+      expect(sdk.naming.getEventBridgeEventBusLogicalId('ExampleEventBusName')).to.equal(
+        'ExampleEventBusNameEventBridgeEventBus'
+      );
+    });
+  });
+
+  describe('#getEventBridgeRuleLogicalId()', () => {
+    it('should normalize the rule name and append correct suffix', () => {
+      expect(sdk.naming.getEventBridgeRuleLogicalId('exampleRuleName')).to.equal(
+        'ExampleRuleNameEventBridgeRule'
+      );
+    });
+  });
+
+  describe('#getEventBridgeLambdaPermissionLogicalId()', () => {
+    it('should normalize the name and append correct suffix with index', () => {
+      expect(sdk.naming.getEventBridgeLambdaPermissionLogicalId('exampleFunction', 1)).to.equal(
+        'ExampleFunctionEventBridgeLambdaPermission1'
+      );
+    });
+  });
+
+  describe('#getLambdaAuthorizerHttpApiPermissionLogicalId()', () => {
+    it('should normalize the name and append correct suffix', () => {
+      expect(sdk.naming.getLambdaAuthorizerHttpApiPermissionLogicalId('authorizerName')).to.equal(
+        'AuthorizerNameLambdaAuthorizerPermissionHttpApi'
+      );
     });
   });
 });

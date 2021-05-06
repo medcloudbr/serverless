@@ -76,7 +76,7 @@ describe('Create', () => {
 
         return create.create().catch((error) => {
           expect(error).to.match(/Wrong/);
-          expect(downloadStub).to.have.been.calledOnce; // eslint-disable-line
+          expect(downloadStub).to.have.been.calledOnce;
         });
       });
 
@@ -89,7 +89,7 @@ describe('Create', () => {
             arg[0].includes('installed "serverless"')
           );
 
-          expect(downloadStub).to.have.been.calledOnce; // eslint-disable-line
+          expect(downloadStub).to.have.been.calledOnce;
           expect(installationMessage[0]).to.have.lengthOf(1);
         });
       });
@@ -104,7 +104,7 @@ describe('Create', () => {
             arg[0].includes('installed "serverless" as "sls"')
           );
 
-          expect(downloadStub).to.have.been.calledOnce; // eslint-disable-line
+          expect(downloadStub).to.have.been.calledOnce;
           expect(installationMessage[0]).to.have.lengthOf(1);
         });
       });
@@ -131,7 +131,7 @@ describe('Create', () => {
       process.chdir(tmpDir);
       create.options.template = 'aws-nodejs';
       return create.create().then(() => {
-        expect(create.serverless.config.servicePath).to.be.equal(process.cwd());
+        expect(create.serverless.serviceDir).to.be.equal(process.cwd());
       });
     });
 
@@ -1107,7 +1107,7 @@ describe('Create', () => {
 
         expect(dirContent).to.include('serverless.yml');
         expect(dirContent).to.include('handler.js');
-        expect(dirContent).to.include('gitignore');
+        expect(dirContent).to.include('.gitignore');
 
         // check if the service was renamed
         const serverlessYmlfileContent = fse
@@ -1129,7 +1129,7 @@ describe('Create', () => {
 
         expect(dirContent).to.include('serverless.yml');
         expect(dirContent).to.include('handler.js');
-        expect(dirContent).to.include('gitignore');
+        expect(dirContent).to.include('.gitignore');
 
         // check if the service was renamed
         const serverlessYmlfileContent = fse
@@ -1254,8 +1254,8 @@ describe('Create', () => {
         const dirContent = fs.readdirSync(process.cwd());
         expect(dirContent).to.include('handler.js');
         expect(dirContent).to.include('serverless.yml');
-        expect(create.serverless.config.servicePath).includes('my_good_service');
-        expect(create.serverless.config.servicePath).to.be.equal(process.cwd());
+        expect(create.serverless.serviceDir).includes('my_good_service');
+        expect(create.serverless.serviceDir).to.be.equal(process.cwd());
       });
     });
   });

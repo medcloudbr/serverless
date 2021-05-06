@@ -20,7 +20,6 @@ describe('AwsRollbackFunction', () => {
       'node-fetch': fetchStub,
     });
     serverless = new Serverless();
-    serverless.servicePath = true;
     serverless.service.functions = {
       hello: {
         handler: true,
@@ -65,8 +64,6 @@ describe('AwsRollbackFunction', () => {
     });
 
     it('should have hooks', () => expect(awsRollbackFunction.hooks).to.be.not.empty);
-
-    it('should have commands', () => expect(awsRollbackFunction.commands).to.be.not.empty);
 
     it('should set the provider variable to an instance of AwsProvider', () =>
       expect(awsRollbackFunction.provider).to.be.instanceof(AwsProvider));

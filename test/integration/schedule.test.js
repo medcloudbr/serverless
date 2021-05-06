@@ -1,25 +1,25 @@
 'use strict';
 
 const { expect } = require('chai');
-const fixtures = require('../fixtures');
+const fixtures = require('../fixtures/programmatic');
 
 const { deployService, removeService } = require('../utils/integration');
 const { confirmCloudWatchLogs } = require('../utils/misc');
 
 describe('AWS - Schedule Integration Test', function () {
   this.timeout(1000 * 60 * 100); // Involves time-taking deploys
-  let servicePath;
+  let serviceDir;
   let stackName;
 
   before(async () => {
     const serviceData = await fixtures.setup('schedule');
-    ({ servicePath } = serviceData);
+    ({ servicePath: serviceDir } = serviceData);
     stackName = `${serviceData.serviceConfig.service}-dev`;
-    return deployService(servicePath);
+    return deployService(serviceDir);
   });
 
   after(async () => {
-    return removeService(servicePath);
+    return removeService(serviceDir);
   });
 
   describe('Minimal Setup', () => {
@@ -27,7 +27,10 @@ describe('AWS - Schedule Integration Test', function () {
       const functionName = 'scheduleMinimal';
 
       return confirmCloudWatchLogs(`/aws/lambda/${stackName}-${functionName}`, async () => {}, {
-        timeout: 3 * 60 * 1000,
+        checkIsComplete: (soFarEvents) => {
+          const logs = soFarEvents.reduce((data, event) => data + event.message, '');
+          return logs.includes(functionName);
+        },
       }).then((events) => {
         const logs = events.reduce((data, event) => data + event.message, '');
         expect(logs).to.include(functionName);
@@ -40,7 +43,6 @@ describe('AWS - Schedule Integration Test', function () {
       const functionName = 'scheduleExtended';
 
       return confirmCloudWatchLogs(`/aws/lambda/${stackName}-${functionName}`, async () => {}, {
-        timeout: 3 * 60 * 1000,
         checkIsComplete: (soFarEvents) => {
           const logs = soFarEvents.reduce((data, event) => data + event.message, '');
           return logs.includes('transformedInput');

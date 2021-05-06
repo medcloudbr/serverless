@@ -26,7 +26,7 @@ describe('uploadArtifacts', () => {
 
   beforeEach(() => {
     serverless = new Serverless();
-    serverless.config.servicePath = 'foo';
+    serverless.serviceDir = 'foo';
     serverless.setProvider('aws', new AwsProvider(serverless, {}));
     const options = {
       stage: 'dev',
@@ -47,10 +47,10 @@ describe('uploadArtifacts', () => {
     cryptoStub = {
       createHash() {
         return this;
-      }, // eslint-disable-line
+      },
       update() {
         return this;
-      }, // eslint-disable-line
+      },
       digest: sinon.stub(),
     };
     const uploadArtifacts = proxyquire(
@@ -157,8 +157,8 @@ describe('uploadArtifacts', () => {
       uploadStub.restore();
     });
 
-    it('should throw for null artifact paths', () => {
-      expect(() => awsDeploy.uploadZipFile(null)).to.throw(Error);
+    it('should throw for null artifact paths', async () => {
+      await expect(awsDeploy.uploadZipFile(null)).to.be.rejectedWith(Error);
     });
 
     it('should upload the .zip file to the S3 bucket', () => {
@@ -170,7 +170,6 @@ describe('uploadArtifacts', () => {
 
       return awsDeploy.uploadZipFile(artifactFilePath).then(() => {
         expect(uploadStub).to.have.been.calledOnce;
-        expect(readFileSyncStub).to.have.been.calledOnce;
         expect(uploadStub).to.have.been.calledWithExactly('S3', 'upload', {
           Bucket: awsDeploy.bucketName,
           Key: `${awsDeploy.serverless.service.package.artifactDirectoryName}/artifact.zip`,
@@ -226,7 +225,7 @@ describe('uploadArtifacts', () => {
     });
 
     it('should upload the service artifact file to the S3 bucket', () => {
-      awsDeploy.serverless.config.servicePath = 'some/path';
+      awsDeploy.serverless.serviceDir = 'some/path';
       awsDeploy.serverless.service.service = 'new-service';
 
       return awsDeploy.uploadFunctionsAndLayers().then(() => {
@@ -309,7 +308,7 @@ describe('uploadArtifacts', () => {
     });
 
     it('should log artifact size', () => {
-      awsDeploy.serverless.config.servicePath = 'some/path';
+      awsDeploy.serverless.serviceDir = 'some/path';
       awsDeploy.serverless.service.service = 'new-service';
 
       sinon.spy(awsDeploy.serverless.cli, 'log');
@@ -335,8 +334,8 @@ describe('uploadArtifacts', () => {
       // There were observed race conditions (mostly in Node.js v6) where this temporary home
       // folder was cleaned before stream initialized fully, hence throwing uncaught
       // ENOENT exception into the air.
-      sinon.stub(fs, 'createReadStream').returns({ path: customResourcesFilePath });
-      serverless.config.servicePath = serviceDirPath;
+      sinon.stub(fs, 'createReadStream').returns({ path: customResourcesFilePath, on: () => {} });
+      serverless.serviceDir = serviceDirPath;
     });
 
     afterEach(() => {

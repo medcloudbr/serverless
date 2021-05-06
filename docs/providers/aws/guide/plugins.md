@@ -114,19 +114,26 @@ In this case `plugin1` is loaded before `plugin2`.
 
 ## Writing Plugins
 
+**Note:** In order to ensure that your plugin works correctly with Framework in `v2.x`, keep the following things in mind:
+
+- Do not depend on `Bluebird` API for Promises returned by Framework internals - we are actively migrating away from `Bluebird` at this point
+- If your plugin adds new properties, ensure to define corresponding schema definitions, please refer to: [Extending validation schema](#extending-validation-schema)
+- Avoid using `subcommands` as the support for them might become deprecated or removed in next major version of the Framework
+- Add `serverless` to `peerDependencies` in order to ensure officially supported Framework version(s)
+
 ### Concepts
 
 #### Plugin
 
 Code which defines _Commands_, any _Events_ within a _Command_, and any _Hooks_ assigned to a _Lifecycle Event_.
 
-- Command // CLI configuration, commands, subcommands, options
+- Command // CLI configuration, commands, options
   - LifecycleEvent(s) // Events that happen sequentially when the command is run
     - Hook(s) // Code that runs when a Lifecycle Event happens during a Command
 
 #### Command
 
-A CLI _Command_ that can be called by a user, e.g. `serverless deploy`. A Command has no logic, but simply defines the CLI configuration (e.g. command, subcommands, parameters) and the _Lifecycle Events_ for the command. Every command defines its own lifecycle events.
+A CLI _Command_ that can be called by a user, e.g. `serverless foo`. A Command has no logic, but simply defines the CLI configuration (e.g. command, parameters) and the _Lifecycle Events_ for the command. Every command defines its own lifecycle events.
 
 ```javascript
 'use strict';
@@ -134,7 +141,7 @@ A CLI _Command_ that can be called by a user, e.g. `serverless deploy`. A Comman
 class MyPlugin {
   constructor() {
     this.commands = {
-      deploy: {
+      foo: {
         lifecycleEvents: ['resources', 'functions'],
       },
     };
@@ -148,12 +155,12 @@ module.exports = MyPlugin;
 
 Events that fire sequentially during a Command. The above example lists two Events. However, for each Event, an additional `before` and `after` event is created. Therefore, six Events exist in the above example:
 
-- `before:deploy:resources`
-- `deploy:resources`
-- `after:deploy:resources`
-- `before:deploy:functions`
-- `deploy:functions`
-- `after:deploy:functions`
+- `before:foo:resources`
+- `foo:resources`
+- `after:foo:resources`
+- `before:foo:functions`
+- `foo:functions`
+- `after:foo:functions`
 
 The name of the command in front of lifecycle events when they are used for Hooks.
 
@@ -164,170 +171,145 @@ A Hook binds code to any lifecycle event from any command.
 ```javascript
 'use strict';
 
-class Deploy {
+class MyPugin {
   constructor() {
     this.commands = {
-      deploy: {
+      foo: {
         lifecycleEvents: ['resources', 'functions'],
       },
     };
 
     this.hooks = {
-      'before:deploy:resources': this.beforeDeployResources,
-      'deploy:resources': this.deployResources,
-      'after:deploy:functions': this.afterDeployFunctions,
+      'before:foo:resources': this.beforeFooResources,
+      'foo:resources': this.fooResources,
+      'after:foo:functions': this.afterFooFunctions,
     };
   }
 
-  beforeDeployResources() {
-    console.log('Before Deploy Resources');
+  beforeFooResources() {
+    console.log('Before Foo Resources');
   }
 
-  deployResources() {
-    console.log('Deploy Resources');
+  fooResources() {
+    console.log('Foo Resources');
   }
 
-  afterDeployFunctions() {
-    console.log('After Deploy Functions');
-  }
-}
-
-module.exports = Deploy;
-```
-
-### Custom Variable Types
-
-As of version 1.52.0 of the Serverless framework, plugins can officially implement their own
-variable types for use in serverless config files.
-
-Example:
-
-```javascript
-'use strict';
-
-class EchoTestVarPlugin {
-  constructor() {
-    getEchoTestValue(src) {
-      return src.slice(5);
-    }
-    getDependentEchoTestValue(src) {
-      return src.slice(5);
-    }
-    this.variableResolvers = {
-      echo: this.getEchoTestValue,
-      // if a variable type depends on profile/stage/region/credentials, to avoid infinite loops in
-      // trying to resolve variables that depend on themselves, specify as such by setting a
-      // dependendServiceName property on the variable getter
-      echoStageDependent: {
-        resolver: this.getDependentEchoTestValue,
-        serviceName: 'echo that isnt prepopulated',
-        isDisabledAtPrepopulation: true
-    };
-  }
-}
-```
-
-The above plugin will add support for variables like `${echo:foobar}` and resolve to the key. EG:
-`${echo:foobar}` will resolve to `'foobar'`.
-
-#### `this.variableResolvers` structure
-
-The data structure of `this.variableResolvers` is an `Object` with keys that are either a
-`function` or `Object`.
-
-The keys are used to generate the regex which matches the variable type. Eg, a key of `test` will
-match variables like `${test:foobar}`.
-
-If the value is a `function` it is used to resolve variables matched. It must be `async` or return
-a `Promise` and accepts the variable string(with prefix but not the wrapping variable syntax,
-eg `test:foobar`) as it's only argument.
-
-If the value is an `Object`, it can have the following keys:
-
-- `resolver` - required, a function, same requirements as described above.
-- `isDisabledAtPrepopulation` - optional, a boolean, disable this variable type when populating
-  stage, region, and credentials. This is important for variable types that depend on AWS or other
-  service that depend on those variables
-- `serviceName` - required if `isDisabledAtPrepopulation === true`, a string to display to users
-  if they try to use the variable type in one of the fields disabled for populating
-  stage/region/credentials.
-
-### Nesting Commands
-
-You can also nest commands, e.g. if you want to provide a command `serverless deploy function`. Those nested commands have their own lifecycle events and do not inherit them from their parents.
-
-```javascript
-'use strict';
-
-class MyPlugin {
-  constructor() {
-    this.commands = {
-      deploy: {
-        lifecycleEvents: ['resources', 'functions'],
-        commands: {
-          function: {
-            lifecycleEvents: ['package', 'deploy'],
-          },
-        },
-      },
-    };
+  afterFooFunctions() {
+    console.log('After Foo Functions');
   }
 }
 
 module.exports = MyPlugin;
 ```
 
+### Custom Variable Types
+
+Plugins may register its own configuration variables resolution sources.
+
+Resolvers should be configured at `configurationVariablesSources` in form of a plain object that exposes `resolve` function.
+Check below example
+
+```javascript
+'use strict';
+
+class SomePlugin {
+  constructor() {
+
+    this.configurationVariablesSources = {
+      foo: {
+        async resolve({ address, params, resolveConfigurationProperty, options  }) {
+          // `address` and `params` reflect values configured with a variable:
+          // ${foo(param1, param2):address}
+          // Note: they're passed if they're configured into variable
+
+          // `options` is CLI options
+          // `resolveConfigurationProperty` allows to access other configuration properties,
+          // and guarantees to return a fully resolved form (even if property is configured with variables)
+          const stage = options.stage || await  resolveConfigurationProperty(["provider", "stage"]) || "dev";
+
+          // Resolver is expected to return plain object, with resolved value set on `value` property.
+          // Resolve value can be any JSON value
+          return {
+            //
+            value: `Resolution of "foo" source for "${stage}" stage at "${address || ""}" addresss with "${(params || []).join(", ")}" params`
+          }
+        }
+      }
+
+}
+```
+
+Having an above source resolver (as provided with a plugin), we may use new variable source in configuration as follows:
+
+```yaml
+service: test
+provider: aws
+custom:
+  value1: ${foo(one, two):whatever}
+plugins:
+  - ./some-plugin
+```
+
+Configuration will be resolved into following form:
+
+```yaml
+service: test
+provider: aws
+custom:
+  value1: Resolution of "foo" source for "dev" stage at "whatever" address with "one, two" params
+plugins:
+  - ./some-plugin
+```
+
 ### Defining Options
 
-Each (sub)command can have multiple Options.
+Each command can have multiple Options.
 
-Options are passed in with a double dash (`--`) like this: `serverless function deploy --function functionName`.
+Options are passed in with a double dash (`--`) like this: `serverless foo --function functionName`.
 
-Option Shortcuts are passed in with a single dash (`-`) like this: `serverless function deploy -f functionName`.
+Option Shortcuts are passed in with a single dash (`-`) like this: `serverless foo -f functionName`.
 
 The `options` object will be passed in as the second parameter to the constructor of your plugin.
 
 In it, you can optionally add a `shortcut` property, as well as a `required` property. The Framework will return an error if a `required` Option is not included. You can also set a `default` property if your option is not required.
+
+Additionally `type` for each option should be set. Supported types are `string`, `boolean` and `multiple` (multiple strings).
 
 **Note:** At this time, the Serverless Framework does not use parameters.
 
 ```javascript
 'use strict';
 
-class Deploy {
+class MyPlugin {
   constructor(serverless, options) {
     this.serverless = serverless;
     this.options = options;
 
     this.commands = {
-      deploy: {
+      foo: {
         lifecycleEvents: ['functions'],
         options: {
           function: {
-            usage: 'Specify the function you want to deploy (e.g. "--function myFunction")',
+            usage: 'Specify the function you want to handle (e.g. "--function myFunction")',
             shortcut: 'f',
             required: true,
-          },
-          stage: {
-            usage: 'Specify the stage you want to deploy to. (e.g. "--stage prod")',
-            shortcut: 's',
-            default: 'dev',
+            type: 'string', // Possible options: "string", "boolean", "multiple"
           },
         },
       },
     };
 
     this.hooks = {
-      'deploy:functions': this.deployFunction.bind(this),
+      'foo:functions': this.fooFunction.bind(this),
     };
   }
 
-  deployFunction() {
-    console.log('Deploying function: ', this.options.function);
+  fooFunction() {
+    console.log('Foo function: ', this.options.function);
   }
 }
 
-module.exports = Deploy;
+module.exports = MyPlugin;
 ```
 
 ### Provider Specific Plugins
@@ -341,37 +323,38 @@ The provider definition should be added inside the plugins constructor:
 ```javascript
 'use strict';
 
-class ProviderDeploy {
+class ProviderX {
   constructor(serverless, options) {
     this.serverless = serverless;
     this.options = options;
 
     // set the providers name here
-    this.provider = this.serverless.getProvider('providerName');
+    this.provider = this.serverless.getProvider('providerX');
 
     this.commands = {
-      deploy: {
+      foo: {
         lifecycleEvents: ['functions'],
         options: {
           function: {
-            usage: 'Specify the function you want to deploy (e.g. "--function myFunction")',
+            usage: 'Specify the function you want to handle (e.g. "--function myFunction")',
             required: true,
+            type: 'string', // Possible options: "string", "boolean", "multiple"
           },
         },
       },
     };
 
     this.hooks = {
-      'deploy:functions': this.deployFunction.bind(this),
+      'foo:functions': this.fooFunction.bind(this),
     };
   }
 
-  deployFunction() {
-    console.log('Deploying function: ', this.options.function);
+  fooFunction() {
+    console.log('Foo function: ', this.options.function);
   }
 }
 
-module.exports = ProviderDeploy;
+module.exports = ProviderX;
 ```
 
 The Plugin's functionality will now only be executed when the Serverless Service's provider matches the provider name which is defined inside the plugins constructor.
