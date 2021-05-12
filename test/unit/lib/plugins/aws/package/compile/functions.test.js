@@ -450,17 +450,18 @@ describe('AwsCompileFunctions', () => {
       describe('when IamRoleLambdaExecution is used', () => {
         beforeEach(() => {
           // pretend that the IamRoleLambdaExecution is used
-          awsCompileFunctions.serverless.service.provider.compiledCloudFormationTemplate.Resources.IamRoleLambdaExecution = {
-            Properties: {
-              Policies: [
-                {
-                  PolicyDocument: {
-                    Statement: [],
+          awsCompileFunctions.serverless.service.provider.compiledCloudFormationTemplate.Resources.IamRoleLambdaExecution =
+            {
+              Properties: {
+                Policies: [
+                  {
+                    PolicyDocument: {
+                      Statement: [],
+                    },
                   },
-                },
-              ],
-            },
-          };
+                ],
+              },
+            };
         });
 
         it('should create necessary resources if a SNS arn is provided', () => {
@@ -804,17 +805,18 @@ describe('AwsCompileFunctions', () => {
       describe('when IamRoleLambdaExecution is used', () => {
         beforeEach(() => {
           // pretend that the IamRoleLambdaExecution is used
-          awsCompileFunctions.serverless.service.provider.compiledCloudFormationTemplate.Resources.IamRoleLambdaExecution = {
-            Properties: {
-              Policies: [
-                {
-                  PolicyDocument: {
-                    Statement: [],
+          awsCompileFunctions.serverless.service.provider.compiledCloudFormationTemplate.Resources.IamRoleLambdaExecution =
+            {
+              Properties: {
+                Policies: [
+                  {
+                    PolicyDocument: {
+                      Statement: [],
+                    },
                   },
-                },
-              ],
-            },
-          };
+                ],
+              },
+            };
         });
 
         it('should create necessary resources if a KMS key arn is provided', () => {
@@ -878,17 +880,18 @@ describe('AwsCompileFunctions', () => {
       describe('when IamRoleLambdaExecution is used', () => {
         beforeEach(() => {
           // pretend that the IamRoleLambdaExecution is used
-          awsCompileFunctions.serverless.service.provider.compiledCloudFormationTemplate.Resources.IamRoleLambdaExecution = {
-            Properties: {
-              Policies: [
-                {
-                  PolicyDocument: {
-                    Statement: [],
+          awsCompileFunctions.serverless.service.provider.compiledCloudFormationTemplate.Resources.IamRoleLambdaExecution =
+            {
+              Properties: {
+                Policies: [
+                  {
+                    PolicyDocument: {
+                      Statement: [],
+                    },
                   },
-                },
-              ],
-            },
-          };
+                ],
+              },
+            };
         });
 
         it('should create necessary resources if a tracing config is provided', () => {
@@ -1520,8 +1523,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
               handler: 'index.handler',
               fileSystemConfig: {
                 localMountPath: '/mnt/path',
-                arn:
-                  'arn:aws:elasticfilesystem:us-east-1:111111111111:access-point/fsap-a1a1a1a1a1a1a1a1a',
+                arn: 'arn:aws:elasticfilesystem:us-east-1:111111111111:access-point/fsap-a1a1a1a1a1a1a1a1a',
               },
             },
           },
@@ -1932,8 +1934,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
               },
               fileSystemConfig: {
                 localMountPath: '/mnt/path',
-                arn:
-                  'arn:aws:elasticfilesystem:us-east-1:111111111111:access-point/fsap-a1a1a1a1a1a1a1a1a',
+                arn: 'arn:aws:elasticfilesystem:us-east-1:111111111111:access-point/fsap-a1a1a1a1a1a1a1a1a',
               },
             },
             fnImage: {
@@ -2309,8 +2310,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
             foo: {
               fileSystemConfig: {
                 localMountPath: '/mnt/path',
-                arn:
-                  'arn:aws:elasticfilesystem:us-east-1:111111111111:access-point/fsap-a1a1a1a1a1a1a1a1a',
+                arn: 'arn:aws:elasticfilesystem:us-east-1:111111111111:access-point/fsap-a1a1a1a1a1a1a1a1a',
               },
             },
           },
@@ -2588,7 +2588,7 @@ describe('lib/plugins/aws/package/compile/functions/index.test.js', () => {
       //    - Corresponding url is configured in CF template
       // Test with "deploy" command, and configure `lastLifecycleHookName` to 'aws:deploy:deploy:uploadArtifact'
       // It'll demand stubbing few other AWS calls for that follow this stub:
-      // https://github.com/serverless/enterprise-plugin/blob/cdd53df45dfad18d8bdd79969194a61cb8178671/lib/deployment/parse.test.js#L1585-L1627
+      // https://github.com/serverless/dashboard-plugin/blob/cdd53df45dfad18d8bdd79969194a61cb8178671/lib/deployment/parse.test.js#L1585-L1627
       // Confirm same artifact is used for all functions
     });
 

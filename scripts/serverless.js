@@ -24,6 +24,11 @@ const generateTelemetryPayload = require('../lib/utils/telemetry/generatePayload
 const processBackendNotificationRequest = require('../lib/utils/processBackendNotificationRequest');
 const isTelemetryDisabled = require('../lib/utils/telemetry/areDisabled');
 
+let command;
+let options;
+let commandSchema;
+let serviceDir = null;
+let configuration = null;
 let serverless;
 
 let hasTelemetryBeenReported = false;
@@ -31,6 +36,11 @@ let hasTelemetryBeenReported = false;
 process.once('uncaughtException', (error) =>
   handleError(error, {
     isUncaughtException: true,
+    command,
+    options,
+    commandSchema,
+    serviceDir,
+    configuration,
     serverless,
     hasTelemetryBeenReported,
   })
@@ -43,10 +53,12 @@ const processSpanPromise = (async () => {
 
     const resolveInput = require('../lib/cli/resolve-input');
 
+    let commands;
+    let isHelpRequest;
     // Parse args against schemas of commands which do not require to be run in service context
-    let { command, commands, options, isHelpRequest, commandSchema } = resolveInput(
+    ({ command, commands, options, isHelpRequest, commandSchema } = resolveInput(
       require('../lib/cli/commands-schema/no-service')
-    );
+    ));
 
     // If version number request, show it and abort
     if (options.version) {
@@ -74,11 +86,10 @@ const processSpanPromise = (async () => {
     const logDeprecation = require('../lib/utils/logDeprecation');
 
     let configurationPath = null;
-    let configuration = null;
-    let serviceDir = null;
     let providerName;
     let variablesMeta;
     let resolverConfiguration;
+    let isInteractiveSetup;
 
     const ensureResolvedProperty = (propertyPath, { shouldSilentlyReturnIfLegacyMode } = {}) => {
       if (isPropertyResolved(variablesMeta, propertyPath)) return true;
@@ -108,6 +119,8 @@ const processSpanPromise = (async () => {
 
     if (!commandSchema || commandSchema.serviceDependencyMode) {
       // Command is potentially service specific, follow up with resolution of service config
+
+      isInteractiveSetup = !isHelpRequest && command === '';
 
       const resolveConfigurationPath = require('../lib/cli/resolve-configuration-path');
       const readConfiguration = require('../lib/configuration/read');
@@ -224,6 +237,7 @@ const processSpanPromise = (async () => {
               fulfilledSources: new Set(['file', 'self', 'strToBool']),
               propertyPathsToResolve: new Set(['provider\0name', 'provider\0stage', 'useDotenv']),
             };
+            if (isInteractiveSetup) resolverConfiguration.fulfilledSources.add('opt');
             await resolveVariables(resolverConfiguration);
 
             if (
@@ -372,10 +386,44 @@ const processSpanPromise = (async () => {
       }
     }
 
+    const configurationFilename = configuration && configurationPath.slice(serviceDir.length + 1);
+
+    if (isInteractiveSetup) {
+      require('../lib/cli/ensure-supported-command')(configuration);
+
+      if (!process.stdin.isTTY && !process.env.SLS_INTERACTIVE_SETUP_ENABLE) {
+        throw new ServerlessError(
+          'Attempted to run an interactive setup in non TTY environment.\n' +
+            "If that's intentended enforce with SLS_INTERACTIVE_SETUP_ENABLE=1 environment variable",
+          'INTERACTIVE_SETUP_IN_NON_TTY'
+        );
+      }
+      await require('../lib/cli/interactive-setup')({
+        configuration,
+        serviceDir,
+        configurationFilename,
+        options,
+      });
+      hasTelemetryBeenReported = true;
+      if (!isTelemetryDisabled) {
+        await storeTelemetryLocally(
+          await generateTelemetryPayload({
+            command,
+            options,
+            commandSchema,
+            serviceDir,
+            configuration,
+          })
+        );
+        await sendTelemetry({ serverlessExecutionSpan: processSpanPromise });
+      }
+      return;
+    }
+
     serverless = new Serverless({
       configuration,
       serviceDir,
-      configurationFilename: configuration && configurationPath.slice(serviceDir.length + 1),
+      configurationFilename,
       isConfigurationResolved:
         commands[0] === 'plugin' || Boolean(variablesMeta && !variablesMeta.size),
       hasResolvedCommandsExternally: true,
@@ -387,10 +435,6 @@ const processSpanPromise = (async () => {
     try {
       serverless.onExitPromise = processSpanPromise;
       serverless.invocationId = uuid.v4();
-      // TODO: REMOVE WITH NEXT MAJOR
-      // The purpose of below logic is to ensure that locally resolved `serverless` instance
-      // that might be in lower version will not attempt to handle telemetry on its own
-      process.env.SLS_TRACKING_DISABLED = '1';
       await serverless.init();
       if (serverless.invokedInstance) {
         // Local (in service) installation was found and initialized internally,
@@ -415,9 +459,8 @@ const processSpanPromise = (async () => {
                 { providerName: providerName || 'aws', configuration }
               );
               resolveInput.clear();
-              ({ command, commands, options, isHelpRequest, commandSchema } = resolveInput(
-                commandsSchema
-              ));
+              ({ command, commands, options, isHelpRequest, commandSchema } =
+                resolveInput(commandsSchema));
               serverless.processedInput.commands = serverless.pluginManager.cliCommands = commands;
               serverless.processedInput.options = serverless.pluginManager.cliOptions = options;
               hasFinalCommandSchema = true;
@@ -479,9 +522,8 @@ const processSpanPromise = (async () => {
         }
 
         // Register serverless instance and AWS provider specific variable sources
-        resolverConfiguration.sources.sls = require('../lib/configuration/variables/sources/instance-dependent/get-sls')(
-          serverless
-        );
+        resolverConfiguration.sources.sls =
+          require('../lib/configuration/variables/sources/instance-dependent/get-sls')(serverless);
         resolverConfiguration.fulfilledSources.add('sls');
 
         if (providerName === 'aws') {
@@ -580,11 +622,9 @@ const processSpanPromise = (async () => {
         }
 
         // Report unrecognized variable sources found in variables configured in service config
-        const unresolvedSources = require('../lib/configuration/variables/resolve-unresolved-source-types')(
-          variablesMeta
-        );
+        const unresolvedSources =
+          require('../lib/configuration/variables/resolve-unresolved-source-types')(variablesMeta);
         if (!(configuration.variablesResolutionMode >= 20210326)) {
-          unresolvedSources.delete('opt');
           const legacyCfVarPropertyPaths = new Set();
           const legacySsmVarPropertyPaths = new Set();
           for (const [sourceType, propertyPaths] of unresolvedSources) {
@@ -623,12 +663,16 @@ const processSpanPromise = (async () => {
               { serviceConfig: configuration }
             );
           }
-          if (unresolvedSources.size) {
+          const recognizedSourceNames = new Set(Object.keys(resolverConfiguration.sources));
+          const unrecognizedSourceNames = Array.from(unresolvedSources.keys()).filter(
+            (sourceName) => !recognizedSourceNames.has(sourceName)
+          );
+          if (unrecognizedSourceNames.length) {
             logDeprecation(
               'NEW_VARIABLES_RESOLVER',
-              `Approached unrecognized configuration variable sources: "${Array.from(
-                unresolvedSources.keys()
-              ).join('", "')}".\n` +
+              `Approached unrecognized configuration variable sources: "${unrecognizedSourceNames.join(
+                '", "'
+              )}".\n` +
                 'From a next major this will be communicated with a thrown error.\n' +
                 'Set "variablesResolutionMode: 20210326" in your service config, ' +
                 'to adapt to new behavior now',
@@ -653,10 +697,19 @@ const processSpanPromise = (async () => {
         await serverless.run();
       }
 
-      if (!isTelemetryDisabled && !isHelpRequest) {
-        hasTelemetryBeenReported = true;
-        const telemetryPayload = await generateTelemetryPayload(serverless);
-        await storeTelemetryLocally({ ...telemetryPayload, outcome: 'success' });
+      hasTelemetryBeenReported = true;
+      if (!isTelemetryDisabled && !isHelpRequest && serverless.isTelemetryReportedExternally) {
+        await storeTelemetryLocally({
+          ...(await generateTelemetryPayload({
+            command,
+            options,
+            commandSchema,
+            serviceDir,
+            configuration,
+            serverless,
+          })),
+          outcome: 'success',
+        });
         let backendNotificationRequest;
         if (commands.join(' ') === 'deploy') {
           backendNotificationRequest = await sendTelemetry({
@@ -693,6 +746,11 @@ const processSpanPromise = (async () => {
     }
   } catch (error) {
     handleError(error, {
+      command,
+      options,
+      commandSchema,
+      serviceDir,
+      configuration,
       serverless,
       hasTelemetryBeenReported,
     });

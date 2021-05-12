@@ -412,7 +412,7 @@ describe('PluginManager', () => {
     ({ restoreEnv } = overrideEnv({ whitelist: ['APPDATA', 'PATH'] }));
     serverless = new Serverless();
     serverless.cli = new CLI();
-    serverless.processedInput = { commands: [], options: {} };
+    serverless.processedInput = { commands: ['print'], options: {} };
     pluginManager = new PluginManager(serverless);
     serviceDir = pluginManager.serverless.serviceDir = 'foo';
   });
@@ -657,7 +657,7 @@ describe('PluginManager', () => {
       mockRequire('ServicePluginMock1', ServicePluginMock1);
       mockRequire('ServicePluginMock2', ServicePluginMock2);
       mockRequire('BrokenPluginMock', BrokenPluginMock);
-      mockRequire('@serverless/enterprise-plugin', EnterprisePluginMock);
+      mockRequire('@serverless/dashboard-plugin', EnterprisePluginMock);
     });
 
     it('should load only core plugins when no service plugins are given', () => {
@@ -742,7 +742,7 @@ describe('PluginManager', () => {
       mockRequire.stop('ServicePluginMock1');
       mockRequire.stop('ServicePluginMock2');
       mockRequire.stop('BrokenPluginMock');
-      mockRequire.stop('@serverless/enterprise-plugin');
+      mockRequire.stop('@serverless/dashboard-plugin');
     });
   });
 
